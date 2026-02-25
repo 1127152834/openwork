@@ -230,3 +230,71 @@ This is usually covered by `Release App` when `publish_sidecars` + `publish_npm`
     * `pnpm --filter openwork-orchestrator publish --access public`
 6.  Verify:
     * `npm view openwork-orchestrator version`
+
+## Fork Sync Guardian (Private Fork Workflow)
+
+This repository is maintained as a fork workflow:
+
+* **Private fork (your repo)**: `https://github.com/1127152834/openwork.git`
+* **Upstream source repo**: `https://github.com/different-ai/openwork.git`
+
+### Required remotes
+
+Run once in this repo root:
+
+* `git remote remove fork 2>/dev/null || true`
+* `git remote add fork https://github.com/1127152834/openwork.git`
+* `git remote remove upstream 2>/dev/null || true`
+* `git remote add upstream https://github.com/different-ai/openwork.git`
+* `git fetch --all --prune`
+
+Notes:
+
+* Existing `origin` can remain as-is.
+* `fork` is the push target for custom changes.
+* `upstream` is the pull/sync source.
+
+### Hook setup (required)
+
+Enable versioned hooks that call the skill scripts:
+
+* `git config core.hooksPath .githooks`
+* `chmod +x .githooks/pre-commit .githooks/pre-push`
+
+Hook behavior:
+
+* `pre-commit` -> run `SCALE-COMMIT` report mode (`SCALE_STRICT=0` by default).
+* `pre-push` -> run `SCALE-PULL` + strict `SCALE-COMMIT` gate (blocking by default).
+
+### Standard pull flow (upstream sync)
+
+1. `git fetch --all --prune`
+2. `bash ~/.codex/skills/fork-upstream-sync-guardian/scripts/scale_pull_check.sh upstream/dev fork/dev`
+3. If report policy is low risk, merge/rebase:
+   * `git checkout dev`
+   * `git merge upstream/dev` (or `git rebase upstream/dev`)
+4. Resolve conflicts by SCALE rules:
+   * `L1`: can auto-resolve.
+   * `L2`: provide options and choose explicitly.
+   * `L3`: stop auto-merge and request migration decision.
+
+### Standard commit/push flow (custom changes)
+
+1. `git fetch --all --prune`
+2. `bash ~/.codex/skills/fork-upstream-sync-guardian/scripts/scale_commit_check.sh fork/dev upstream/dev`
+3. Commit only after gate passes:
+   * `git add -A`
+   * `git commit -m "<message>"`
+4. Push to private fork:
+   * `git push fork HEAD`
+
+### Optional strict mode
+
+* Enable checks during commit gate:
+  * `export SCALE_RUN_CHECKS=1`
+* Keep strict fail-fast policy:
+  * `export SCALE_STRICT=1`
+* Temporary bypass for high-risk push decision only:
+  * `export SCALE_ALLOW_HIGH_RISK_PUSH=1`
+* Temporary bypass for failing test/lint gate on push:
+  * `export SCALE_ALLOW_FAILED_CHECKS_PUSH=1`
