@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+SKILL_DIR="${SCALE_SKILL_DIR:-$HOME/.codex/skills/fork-upstream-sync-guardian/scripts}"
+COMMIT_CHECK_SCRIPT="$SKILL_DIR/scale_commit_check.sh"
+
+resolve_ref() {
+  local ref
+  for ref in "$@"; do
+    if git rev-parse --verify "${ref}^{commit}" >/dev/null 2>&1; then
+      echo "$ref"
+      return 0
+    fi
+  done
+  return 1
+}
+
+CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+
+BASE_REF="$(
+  resolve_ref \
+    "fork/${CURRENT_BRANCH}" "origin/${CURRENT_BRANCH}" "upstream/${CURRENT_BRANCH}" \
+    "fork/dev" "origin/dev" "upstream/dev" \
+    "fork/main" "origin/main" "upstream/main" || true
+)"
+
+UPSTREAM_REF="$(
+  resolve_ref \
+    "upstream/${CURRENT_BRANCH}" "origin/${CURRENT_BRANCH}" \
+    "upstream/dev" "origin/dev" \
+    "upstream/main" "origin/main" || true
+)"
+
+if [[ -z "$BASE_REF" || -z "$UPSTREAM_REF" ]]; then
+  echo "[SCALE] Unable to resolve refs. Expected one of fork/origin/upstream with branch ${CURRENT_BRANCH}, dev, or main." >&2
+  exit 1
+fi
+
+if [[ ! -f "$COMMIT_CHECK_SCRIPT" ]]; then
+  echo "[SCALE] Missing script: $COMMIT_CHECK_SCRIPT" >&2
+  exit 1
+fi
+
+mkdir -p "$REPO_ROOT/.scale"
+
+echo "[SCALE] pre-commit -> $COMMIT_CHECK_SCRIPT $BASE_REF $UPSTREAM_REF"
+SCALE_RUN_CHECKS="${SCALE_RUN_CHECKS:-0}" \
+SCALE_STRICT="${SCALE_STRICT:-0}" \
+bash "$COMMIT_CHECK_SCRIPT" "$BASE_REF" "$UPSTREAM_REF"
