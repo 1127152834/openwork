@@ -26,6 +26,7 @@ import {
 } from "../utils";
 import { unwrap } from "../lib/opencode";
 import { finishPerf, perfNow, recordPerfLog } from "../lib/perf-log";
+import { t, currentLocale } from "../../i18n";
 
 export type SessionModelState = {
   overrides: Record<string, ModelRef>;
@@ -553,7 +554,7 @@ export function createSessionStore(options: {
     if (!c) return;
     const trimmed = title.trim();
     if (!trimmed) {
-      throw new Error("Session name is required");
+      throw new Error(t("app.session_name_required", currentLocale()));
     }
     const next = unwrap(await c.session.update({ sessionID, title: trimmed }));
     setStore("sessions", (current) => upsertSession(current, next));
@@ -640,7 +641,7 @@ export function createSessionStore(options: {
         mark("health FAILED", {
           error: error instanceof Error ? error.message : safeStringify(error),
         });
-        throw new Error("Server connection lost. Please reload.");
+        throw new Error(t("app.connection_lost", currentLocale()));
       }
       if (abortIfStale("selection changed after health")) return;
 

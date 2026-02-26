@@ -1,7 +1,8 @@
 import { applyEdits, modify, parse, printParseErrorCode } from "jsonc-parser";
 import { dirname } from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
-import { ApiError } from "./errors.js";
+import { apiError } from "./errors.js";
+import { tr } from "./i18n.js";
 import { ensureDir, exists } from "./utils.js";
 
 interface ParseResult<T> {
@@ -22,7 +23,7 @@ export async function readJsoncFile<T>(path: string, fallback: T): Promise<Parse
       offset: error.offset,
       length: error.length,
     }));
-    throw new ApiError(422, "invalid_jsonc", "Failed to parse JSONC", details);
+    throw apiError(422, "invalid_jsonc", tr("jsonc_parse_failed"), details);
   }
   return { data, raw };
 }

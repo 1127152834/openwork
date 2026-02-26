@@ -4,6 +4,7 @@ import { Activity, CheckCircle2, Circle, HeartPulse, RefreshCw, Sparkles } from 
 import type { OpenworkSoulHeartbeatEntry, OpenworkSoulStatus } from "../lib/openwork-server";
 import soulSetupTemplate from "../data/commands/give-me-a-soul.md?raw";
 import { formatRelativeTime, parseTemplateFrontmatter } from "../utils";
+import { currentLocale, t } from "../../i18n";
 
 type SoulViewProps = {
   workspaceName: string;
@@ -19,9 +20,9 @@ type SoulViewProps = {
 };
 
 const cadenceOptions = [
-  { label: "Every 6 hours", cron: "0 */6 * * *" },
-  { label: "Every 12 hours", cron: "0 */12 * * *" },
-  { label: "Every day", cron: "0 9 * * *" },
+  { labelKey: "soul.cadence_every_6_hours", cron: "0 */6 * * *" },
+  { labelKey: "soul.cadence_every_12_hours", cron: "0 */12 * * *" },
+  { labelKey: "soul.cadence_every_day", cron: "0 9 * * *" },
 ];
 
 const SOUL_SETUP_TEMPLATE = (() => {
@@ -31,14 +32,20 @@ const SOUL_SETUP_TEMPLATE = (() => {
   return { name, body };
 })();
 
-const relativeTime = (value?: string | null) => {
-  if (!value) return "Never";
-  const parsed = Date.parse(value);
-  if (!Number.isFinite(parsed)) return value;
-  return formatRelativeTime(parsed);
-};
-
 export default function SoulView(props: SoulViewProps) {
+  const translate = (key: string) => t(key, currentLocale());
+  const translateWithVars = (key: string, vars: Record<string, string | number>) => {
+    const template = translate(key);
+    return Object.entries(vars).reduce((acc, [name, value]) => acc.replaceAll(`{${name}}`, String(value)), template);
+  };
+
+  const relativeTime = (value?: string | null) => {
+    if (!value) return translate("soul.never");
+    const parsed = Date.parse(value);
+    if (!Number.isFinite(parsed)) return value;
+    return formatRelativeTime(parsed);
+  };
+
   const [focusInput, setFocusInput] = createSignal("");
   const [boundariesInput, setBoundariesInput] = createSignal("");
   const [cadence, setCadence] = createSignal(cadenceOptions[1]?.cron ?? "0 */12 * * *");
@@ -54,25 +61,25 @@ export default function SoulView(props: SoulViewProps) {
     switch (state) {
       case "healthy":
         return {
-          label: "Soul on",
+          label: translate("soul.status_soul_on"),
           tone: "border-emerald-7/50 bg-emerald-3/30 text-emerald-11",
           dot: "bg-emerald-9",
         };
       case "stale":
         return {
-          label: "Heartbeat stale",
+          label: translate("soul.status_heartbeat_stale"),
           tone: "border-amber-7/50 bg-amber-3/30 text-amber-11",
           dot: "bg-amber-9",
         };
       case "error":
         return {
-          label: "Heartbeat error",
+          label: translate("soul.status_heartbeat_error"),
           tone: "border-red-7/50 bg-red-3/30 text-red-11",
           dot: "bg-red-9",
         };
       default:
         return {
-          label: "Soul off",
+          label: translate("soul.status_soul_off"),
           tone: "border-gray-6 bg-gray-2 text-gray-10",
           dot: "bg-gray-7",
         };
@@ -96,53 +103,55 @@ export default function SoulView(props: SoulViewProps) {
     const status = props.status;
     if (!status) {
       return [
-        { id: "memory", label: "Soul memory file", passed: false, detail: "Waiting for Soul status." },
-        { id: "instructions", label: "Instructions wiring", passed: false, detail: "Waiting for Soul status." },
-        { id: "command", label: "Heartbeat command", passed: false, detail: "Waiting for Soul status." },
-        { id: "job", label: "Heartbeat schedule", passed: false, detail: "Waiting for Soul status." },
-        { id: "log", label: "Heartbeat log", passed: false, detail: "Waiting for Soul status." },
-        { id: "proof", label: "Recent heartbeat proof", passed: false, detail: "Run one heartbeat to verify setup." },
+        { id: "memory", label: translate("soul.audit_memory_file"), passed: false, detail: translate("soul.audit_waiting_status") },
+        { id: "instructions", label: translate("soul.audit_instructions_wiring"), passed: false, detail: translate("soul.audit_waiting_status") },
+        { id: "command", label: translate("soul.audit_heartbeat_command"), passed: false, detail: translate("soul.audit_waiting_status") },
+        { id: "job", label: translate("soul.audit_heartbeat_schedule"), passed: false, detail: translate("soul.audit_waiting_status") },
+        { id: "log", label: translate("soul.audit_heartbeat_log"), passed: false, detail: translate("soul.audit_waiting_status") },
+        { id: "proof", label: translate("soul.audit_recent_proof"), passed: false, detail: translate("soul.audit_run_once_verify") },
       ];
     }
 
     return [
       {
         id: "memory",
-        label: "Soul memory file",
+        label: translate("soul.audit_memory_file"),
         passed: status.memoryEnabled,
-        detail: status.memoryEnabled ? status.memoryPath : "Missing .opencode/soul.md",
+        detail: status.memoryEnabled ? status.memoryPath : translate("soul.audit_missing_soul_md"),
       },
       {
         id: "instructions",
-        label: "Instructions wiring",
+        label: translate("soul.audit_instructions_wiring"),
         passed: status.instructionsEnabled,
         detail: status.instructionsEnabled
-          ? "opencode config loads soul memory"
-          : "Add .opencode/soul.md to instructions",
+          ? translate("soul.audit_instructions_ok")
+          : translate("soul.audit_instructions_missing"),
       },
       {
         id: "command",
-        label: "Heartbeat command",
+        label: translate("soul.audit_heartbeat_command"),
         passed: status.heartbeatCommandExists,
-        detail: status.heartbeatCommandExists ? "/soul-heartbeat detected" : "Create /soul-heartbeat",
+        detail: status.heartbeatCommandExists ? translate("soul.audit_command_detected") : translate("soul.audit_command_create"),
       },
       {
         id: "job",
-        label: "Heartbeat schedule",
+        label: translate("soul.audit_heartbeat_schedule"),
         passed: Boolean(status.heartbeatJob),
-        detail: status.heartbeatJob?.schedule || "No soul-heartbeat job",
+        detail: status.heartbeatJob?.schedule || translate("soul.audit_no_job"),
       },
       {
         id: "log",
-        label: "Heartbeat log",
+        label: translate("soul.audit_heartbeat_log"),
         passed: status.heartbeatLogExists,
-        detail: status.heartbeatLogExists ? status.heartbeatPath : "Missing heartbeat.jsonl",
+        detail: status.heartbeatLogExists ? status.heartbeatPath : translate("soul.audit_missing_heartbeat_log"),
       },
       {
         id: "proof",
-        label: "Recent heartbeat proof",
+        label: translate("soul.audit_recent_proof"),
         passed: Boolean(status.lastHeartbeatAt),
-        detail: status.lastHeartbeatAt ? `Latest check-in ${relativeTime(status.lastHeartbeatAt)}` : "No check-ins yet",
+        detail: status.lastHeartbeatAt
+          ? translateWithVars("soul.audit_latest_check_in", { time: relativeTime(status.lastHeartbeatAt) })
+          : translate("soul.audit_no_checkins"),
       },
     ];
   });
@@ -153,21 +162,23 @@ export default function SoulView(props: SoulViewProps) {
     return [
       {
         id: "heartbeat",
-        label: "Heartbeat captured",
+        label: translate("soul.steering_heartbeat_captured"),
         passed: props.heartbeats.length > 0,
-        detail: latest?.ts ? `Latest ${relativeTime(latest.ts)}` : "Run heartbeat now",
+        detail: latest?.ts ? translateWithVars("soul.steering_latest_time", { time: relativeTime(latest.ts) }) : translate("soul.steering_run_now"),
       },
       {
         id: "loose-ends",
-        label: "Loose ends surfaced",
+        label: translate("soul.steering_loose_ends_surfaced"),
         passed: looseEndCount > 0,
-        detail: looseEndCount > 0 ? `${looseEndCount} loose end${looseEndCount === 1 ? "" : "s"} tracked` : "No loose ends yet",
+        detail: looseEndCount > 0
+          ? translateWithVars("soul.steering_loose_end_count", { count: looseEndCount })
+          : translate("soul.steering_no_loose_ends"),
       },
       {
         id: "next-action",
-        label: "Next action ready",
+        label: translate("soul.steering_next_action_ready"),
         passed: Boolean(latest?.nextAction),
-        detail: latest?.nextAction || "Generate one with the steering actions",
+        detail: latest?.nextAction || translate("soul.steering_generate_one"),
       },
     ];
   });
@@ -189,12 +200,10 @@ export default function SoulView(props: SoulViewProps) {
     setHeartbeatBaselineTs(baselineTs);
     setHeartbeatRunStartedAt(Date.now());
     setHeartbeatRunState("running");
-    setHeartbeatRunMessage("Heartbeat task started. Waiting for a fresh check-in entry...");
+    setHeartbeatRunMessage(translate("soul.heartbeat_started_waiting"));
     clearHeartbeatTimers();
 
-    runPrompt(
-      "Run scheduler tool run_job for the job named soul-heartbeat in this workspace. If the job is missing, run /soul-heartbeat once instead. Then summarize the latest heartbeat status with loose ends and one concrete next action.",
-    );
+    runPrompt(translate("soul.prompt_run_heartbeat_now"));
 
     void props.refresh({ force: true });
 
@@ -206,7 +215,7 @@ export default function SoulView(props: SoulViewProps) {
       if (heartbeatRunState() !== "running") return;
       clearHeartbeatTimers();
       setHeartbeatRunState("warning");
-      setHeartbeatRunMessage("Still waiting for heartbeat output. Open the task thread to inspect tool results and retry.");
+      setHeartbeatRunMessage(translate("soul.heartbeat_waiting_output"));
     }, 45000);
   };
 
@@ -220,10 +229,10 @@ export default function SoulView(props: SoulViewProps) {
 
   const heartbeatStatusTitle = createMemo(() => {
     const state = heartbeatRunState();
-    if (state === "success") return "Heartbeat completed";
-    if (state === "warning") return "Heartbeat still running";
-    if (state === "running") return "Heartbeat in progress";
-    return "Run heartbeat now";
+    if (state === "success") return translate("soul.heartbeat_completed");
+    if (state === "warning") return translate("soul.heartbeat_still_running");
+    if (state === "running") return translate("soul.heartbeat_in_progress");
+    return translate("soul.run_heartbeat_now");
   });
 
   createEffect(() => {
@@ -238,7 +247,7 @@ export default function SoulView(props: SoulViewProps) {
 
     clearHeartbeatTimers();
     setHeartbeatRunState("success");
-    setHeartbeatRunMessage(`Latest check-in: ${relativeTime(latestTs)}.`);
+    setHeartbeatRunMessage(translateWithVars("soul.latest_check_in", { time: relativeTime(latestTs) }));
   });
 
   onCleanup(() => {
@@ -246,7 +255,8 @@ export default function SoulView(props: SoulViewProps) {
   });
 
   const cadenceLabel = createMemo(() => {
-    return cadenceOptions.find((option) => option.cron === cadence())?.label ?? cadence();
+    const option = cadenceOptions.find((candidate) => candidate.cron === cadence());
+    return option ? translate(option.labelKey) : cadence();
   });
 
   return (
@@ -256,13 +266,13 @@ export default function SoulView(props: SoulViewProps) {
           <div class="space-y-2">
             <div class="flex items-center gap-2">
               <HeartPulse size={18} class="text-dls-secondary" />
-              <h2 class="text-xl font-semibold text-dls-text">Soul and Heartbeat</h2>
+              <h2 class="text-xl font-semibold text-dls-text">{translate("soul.title")}</h2>
               <span class={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${statusMeta().tone}`}>
                 {statusMeta().label}
               </span>
             </div>
             <p class="text-sm text-dls-secondary max-w-2xl">
-              Enable Soul from here, audit what is wired, and verify heartbeat proof before steering the next move.
+              {translate("soul.subtitle")}
             </p>
           </div>
           <button
@@ -276,7 +286,7 @@ export default function SoulView(props: SoulViewProps) {
             onClick={() => props.refresh({ force: true })}
           >
             <RefreshCw size={14} class={props.loading ? "animate-spin" : ""} />
-            {props.loading ? "Refreshing" : "Refresh"}
+            {props.loading ? translate("soul.refreshing") : translate("common.refresh")}
           </button>
         </div>
 
@@ -288,33 +298,33 @@ export default function SoulView(props: SoulViewProps) {
 
         <div class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div class="rounded-xl border border-dls-border bg-dls-hover/40 px-4 py-3">
-            <div class="text-[11px] uppercase tracking-wide text-dls-secondary">Worker</div>
+            <div class="text-[11px] uppercase tracking-wide text-dls-secondary">{translate("soul.worker")}</div>
             <div class="mt-1 text-sm text-dls-text truncate">{props.workspaceName}</div>
           </div>
           <div class="rounded-xl border border-dls-border bg-dls-hover/40 px-4 py-3">
-            <div class="text-[11px] uppercase tracking-wide text-dls-secondary">Last heartbeat</div>
+            <div class="text-[11px] uppercase tracking-wide text-dls-secondary">{translate("soul.last_heartbeat")}</div>
             <div class="mt-1 text-sm text-dls-text">{relativeTime(props.status?.lastHeartbeatAt)}</div>
           </div>
           <div class="rounded-xl border border-dls-border bg-dls-hover/40 px-4 py-3">
-            <div class="text-[11px] uppercase tracking-wide text-dls-secondary">Heartbeat count</div>
+            <div class="text-[11px] uppercase tracking-wide text-dls-secondary">{translate("soul.heartbeat_count")}</div>
             <div class="mt-1 text-sm text-dls-text">{props.status?.heartbeatCount ?? 0}</div>
           </div>
           <div class="rounded-xl border border-dls-border bg-dls-hover/40 px-4 py-3">
-            <div class="text-[11px] uppercase tracking-wide text-dls-secondary">Schedule</div>
+            <div class="text-[11px] uppercase tracking-wide text-dls-secondary">{translate("soul.schedule")}</div>
             <div class="mt-1 text-sm text-dls-text truncate">
-              {props.status?.heartbeatJob?.schedule || "No heartbeat schedule"}
+              {props.status?.heartbeatJob?.schedule || translate("soul.no_heartbeat_schedule")}
             </div>
           </div>
         </div>
 
         <div class="mt-4 rounded-xl border border-dls-border bg-dls-hover/30 px-4 py-3 text-sm text-dls-secondary">
-          {props.status?.summary || "Soul status has not been loaded yet."}
+          {props.status?.summary || translate("soul.status_not_loaded")}
         </div>
 
         <Show when={!props.status?.enabled}>
           <div class="mt-4 rounded-xl border border-blue-7/40 bg-blue-3/20 p-3 flex flex-wrap items-center justify-between gap-3">
             <div class="text-xs text-blue-11 max-w-lg">
-              Soul is currently off. Run setup once to create memory, scheduler wiring, and reversible commands for this worker.
+              {translate("soul.off_hint")}
             </div>
             <button
               type="button"
@@ -327,16 +337,19 @@ export default function SoulView(props: SoulViewProps) {
               onClick={() => runPrompt(enableSoulPrompt())}
             >
               <Sparkles size={14} />
-              Enable soul mode
+              {translate("soul.enable_mode")}
             </button>
           </div>
         </Show>
 
         <div class="mt-6 rounded-xl border border-dls-border bg-dls-hover/20 p-4 space-y-3">
           <div class="flex items-center justify-between gap-3">
-            <h3 class="text-sm font-semibold text-dls-text">Soul activation audit</h3>
+            <h3 class="text-sm font-semibold text-dls-text">{translate("soul.activation_audit")}</h3>
             <div class="text-[11px] text-dls-secondary">
-              {setupAuditItems().filter((item) => item.passed).length}/{setupAuditItems().length} checks passing
+              {translateWithVars("soul.checks_passing", {
+                passed: setupAuditItems().filter((item) => item.passed).length,
+                total: setupAuditItems().length,
+              })}
             </div>
           </div>
           <div class="grid gap-2 md:grid-cols-2">
@@ -372,11 +385,11 @@ export default function SoulView(props: SoulViewProps) {
         <div class="rounded-2xl border border-dls-border bg-dls-surface p-6 space-y-4">
           <div class="flex items-center justify-between gap-3">
             <div>
-              <h3 class="text-base font-semibold text-dls-text">Heartbeat proof</h3>
-              <p class="text-xs text-dls-secondary">Review recent check-ins, loose ends, and next actions.</p>
+              <h3 class="text-base font-semibold text-dls-text">{translate("soul.heartbeat_proof")}</h3>
+              <p class="text-xs text-dls-secondary">{translate("soul.heartbeat_proof_description")}</p>
             </div>
             <Show when={props.loadingHeartbeats}>
-              <span class="text-xs text-dls-secondary">Loading...</span>
+              <span class="text-xs text-dls-secondary">{translate("soul.loading")}</span>
             </Show>
           </div>
 
@@ -384,7 +397,7 @@ export default function SoulView(props: SoulViewProps) {
             when={latestHeartbeat()}
             fallback={
               <div class="rounded-xl border border-dls-border bg-dls-hover/40 px-4 py-6 text-sm text-dls-secondary">
-                No heartbeat entries yet. Run heartbeat now (or `/soul-heartbeat`) to create proof.
+                {translate("soul.no_heartbeat_entries")}
               </div>
             }
           >
@@ -392,17 +405,17 @@ export default function SoulView(props: SoulViewProps) {
               <div class="rounded-xl border border-dls-border bg-dls-hover/30 px-4 py-3 space-y-2">
                 <div class="flex items-center gap-2 text-xs text-dls-secondary">
                   <span class={`h-2 w-2 rounded-full ${statusMeta().dot}`} />
-                  Latest check-in {relativeTime(entry().ts)}
+                  {translateWithVars("soul.latest_check_in_inline", { time: relativeTime(entry().ts) })}
                 </div>
                 <div class="text-sm text-dls-text">{entry().summary}</div>
                 <Show when={entry().nextAction}>
                   <div class="text-xs text-dls-text">
-                    <span class="text-dls-secondary">Next:</span> {entry().nextAction}
+                    <span class="text-dls-secondary">{translate("soul.next_prefix")}</span> {entry().nextAction}
                   </div>
                 </Show>
                 <Show when={entry().looseEnds.length > 0}>
                   <div class="space-y-1">
-                    <div class="text-[11px] uppercase tracking-wide text-dls-secondary">Loose ends</div>
+                    <div class="text-[11px] uppercase tracking-wide text-dls-secondary">{translate("soul.loose_ends")}</div>
                     <ul class="space-y-1 text-xs text-dls-secondary">
                       <For each={entry().looseEnds.slice(0, 3)}>
                         {(item) => <li>- {item}</li>}
@@ -422,7 +435,7 @@ export default function SoulView(props: SoulViewProps) {
                     <div class="text-xs text-dls-secondary">{relativeTime(entry.ts)}</div>
                     <div class="text-sm text-dls-text">{entry.summary}</div>
                     <Show when={entry.nextAction}>
-                      <div class="text-xs text-dls-secondary truncate">Next: {entry.nextAction}</div>
+                      <div class="text-xs text-dls-secondary truncate">{translate("soul.next_prefix")} {entry.nextAction}</div>
                     </Show>
                   </div>
                 )}
@@ -434,9 +447,9 @@ export default function SoulView(props: SoulViewProps) {
         <div class="space-y-6">
           <div class="rounded-2xl border border-dls-border bg-dls-surface p-6 space-y-4">
             <div>
-              <h3 class="text-base font-semibold text-dls-text">Steering checklist</h3>
+              <h3 class="text-base font-semibold text-dls-text">{translate("soul.steering_checklist")}</h3>
               <p class="text-xs text-dls-secondary">
-                Trigger each steering step from here and confirm Soul outputs are visible in heartbeat proof.
+                {translate("soul.steering_checklist_description")}
               </p>
             </div>
 
@@ -466,48 +479,46 @@ export default function SoulView(props: SoulViewProps) {
                 disabled={props.newTaskDisabled || heartbeatRunState() === "running"}
                 onClick={runHeartbeatNow}
               >
-                {heartbeatRunState() === "running" ? "Running heartbeat..." : "Run heartbeat now"}
+                {heartbeatRunState() === "running" ? translate("soul.running_heartbeat") : translate("soul.run_heartbeat_now")}
               </button>
               <button
                 type="button"
                 class="rounded-xl border border-dls-border px-3 py-2 text-left text-sm text-dls-text hover:bg-dls-hover disabled:opacity-60"
                 disabled={props.newTaskDisabled}
                 onClick={() =>
-                  runPrompt(
-                    `Review ${props.workspaceRoot || "this worker"} with .opencode/soul.md, recent heartbeat entries, AGENTS.md guidance, recent sessions, open todos, and transcript snippets from opencode.db. Prioritize the top 3 loose ends and propose a concrete plan with one first step.`,
-                  )
+                  runPrompt(translateWithVars("soul.prompt_prioritize_loose_ends", {
+                    workspace: props.workspaceRoot || translate("soul.this_worker"),
+                  }))
                 }
               >
-                Prioritize loose ends
+                {translate("soul.prioritize_loose_ends")}
               </button>
               <button
                 type="button"
                 class="rounded-xl border border-dls-border px-3 py-2 text-left text-sm text-dls-text hover:bg-dls-hover disabled:opacity-60 sm:col-span-2"
                 disabled={props.newTaskDisabled}
                 onClick={() =>
-                  runPrompt(
-                    "Run a Soul improvement sweep: read .opencode/soul.md and AGENTS.md, query recent sessions/todos/transcript text for this workspace from opencode.db, then propose 3 concrete improvements for process/skills/agents. If safe, update Loose ends and Recurring chores in .opencode/soul.md and explain every change.",
-                  )
+                  runPrompt(translate("soul.prompt_improvement_sweep"))
                 }
               >
-                Improvement sweep
+                {translate("soul.improvement_sweep")}
               </button>
             </div>
 
             <div class={`rounded-xl border px-3 py-2 text-xs ${heartbeatStatusCardTone()}`}>
               <div class="font-medium">{heartbeatStatusTitle()}</div>
-              <div class="mt-1">{heartbeatRunMessage() || "Start a manual heartbeat and watch this card for live status."}</div>
+              <div class="mt-1">{heartbeatRunMessage() || translate("soul.start_manual_heartbeat")}</div>
             </div>
           </div>
 
           <div class="rounded-2xl border border-dls-border bg-dls-surface p-6 space-y-4">
             <div class="space-y-2">
-              <label class="text-xs font-medium text-dls-secondary">Current focus</label>
+              <label class="text-xs font-medium text-dls-secondary">{translate("soul.current_focus")}</label>
               <input
                 type="text"
                 value={focusInput()}
                 onInput={(event) => setFocusInput(event.currentTarget.value)}
-                placeholder="Ship soul UI for remote workers"
+                placeholder={translate("soul.current_focus_placeholder")}
                 class="w-full rounded-xl border border-dls-border bg-dls-hover/40 px-3 py-2 text-sm text-dls-text placeholder:text-dls-secondary focus:outline-none"
               />
               <button
@@ -515,22 +526,20 @@ export default function SoulView(props: SoulViewProps) {
                 class="rounded-lg border border-dls-border px-3 py-1.5 text-xs text-dls-text hover:bg-dls-hover disabled:opacity-60"
                 disabled={props.newTaskDisabled || !focusInput().trim()}
                 onClick={() =>
-                  runPrompt(
-                    `Update .opencode/soul.md so Current focus includes: ${focusInput().trim()}. Keep existing goals/preferences/loose ends, refresh the Last updated timestamp, and summarize what changed.`,
-                  )
+                  runPrompt(translateWithVars("soul.prompt_update_focus", { focus: focusInput().trim() }))
                 }
               >
-                Update focus
+                {translate("soul.update_focus")}
               </button>
             </div>
 
             <div class="space-y-2">
-              <label class="text-xs font-medium text-dls-secondary">Boundaries and guardrails</label>
+              <label class="text-xs font-medium text-dls-secondary">{translate("soul.boundaries_guardrails")}</label>
               <input
                 type="text"
                 value={boundariesInput()}
                 onInput={(event) => setBoundariesInput(event.currentTarget.value)}
-                placeholder="Keep heartbeat concise and non-destructive"
+                placeholder={translate("soul.boundaries_placeholder")}
                 class="w-full rounded-xl border border-dls-border bg-dls-hover/40 px-3 py-2 text-sm text-dls-text placeholder:text-dls-secondary focus:outline-none"
               />
               <button
@@ -538,19 +547,17 @@ export default function SoulView(props: SoulViewProps) {
                 class="rounded-lg border border-dls-border px-3 py-1.5 text-xs text-dls-text hover:bg-dls-hover disabled:opacity-60"
                 disabled={props.newTaskDisabled || !boundariesInput().trim()}
                 onClick={() =>
-                  runPrompt(
-                    `Update .opencode/soul.md Preferences with this boundary: ${boundariesInput().trim()}. Keep existing preferences, append this as a clear guardrail, and summarize the final boundaries list.`,
-                  )
+                  runPrompt(translateWithVars("soul.prompt_update_boundaries", { boundary: boundariesInput().trim() }))
                 }
               >
-                Update boundaries
+                {translate("soul.update_boundaries")}
               </button>
             </div>
 
             <div class="space-y-2 rounded-xl border border-dls-border bg-dls-hover/30 p-3">
               <div class="flex items-center gap-2 text-sm text-dls-text">
                 <Activity size={14} class="text-dls-secondary" />
-                Heartbeat cadence
+                {translate("soul.heartbeat_cadence")}
               </div>
               <div class="flex flex-wrap items-center gap-2">
                 <select
@@ -559,7 +566,7 @@ export default function SoulView(props: SoulViewProps) {
                   onChange={(event) => setCadence(event.currentTarget.value)}
                 >
                   <For each={cadenceOptions}>
-                    {(option) => <option value={option.cron}>{option.label}</option>}
+                    {(option) => <option value={option.cron}>{translate(option.labelKey)}</option>}
                   </For>
                 </select>
                 <button
@@ -567,12 +574,13 @@ export default function SoulView(props: SoulViewProps) {
                   class="rounded-lg border border-dls-border px-3 py-1.5 text-xs text-dls-text hover:bg-dls-hover disabled:opacity-60"
                   disabled={props.newTaskDisabled}
                   onClick={() =>
-                    runPrompt(
-                      `Update the soul-heartbeat scheduler job to ${cadenceLabel()} using cron ${cadence()}. Confirm the scheduler update succeeded, report the next expected heartbeat window, and mention whether stale detection threshold changed.`,
-                    )
+                    runPrompt(translateWithVars("soul.prompt_apply_cadence", {
+                      cadenceLabel: cadenceLabel(),
+                      cron: cadence(),
+                    }))
                   }
                 >
-                  Apply cadence
+                  {translate("soul.apply_cadence")}
                 </button>
               </div>
             </div>

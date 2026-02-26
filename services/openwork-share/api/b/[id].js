@@ -1,6 +1,13 @@
 import { head } from "@vercel/blob";
 import { renderBundlePage, wantsDownload, wantsJsonResponse } from "./render-bundle-page.js";
 
+const RESP_MSG = {
+  methodNotAllowed: "Method not allowed",
+  idRequired: "id is required",
+  notFound: "Not found",
+  upstreamFetchFailed: "Upstream blob fetch failed",
+};
+
 function setCors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
@@ -14,13 +21,13 @@ export default async function handler(req, res) {
     return;
   }
   if (req.method !== "GET") {
-    res.status(405).json({ message: "Method not allowed" });
+    res.status(405).json({ message: RESP_MSG.methodNotAllowed });
     return;
   }
 
   const id = String(req.query?.id ?? "").trim();
   if (!id) {
-    res.status(400).json({ message: "id is required" });
+    res.status(400).json({ message: RESP_MSG.idRequired });
     return;
   }
 
@@ -30,14 +37,14 @@ export default async function handler(req, res) {
   try {
     blob = await head(pathname);
   } catch {
-    res.status(404).json({ message: "Not found" });
+    res.status(404).json({ message: RESP_MSG.notFound });
     return;
   }
 
   // Proxy through this service so CORS is controlled here.
   const response = await fetch(blob.url, { method: "GET" });
   if (!response.ok) {
-    res.status(502).json({ message: "Upstream blob fetch failed" });
+    res.status(502).json({ message: RESP_MSG.upstreamFetchFailed });
     return;
   }
 

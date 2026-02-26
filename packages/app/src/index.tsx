@@ -7,13 +7,15 @@ import "./app/index.css";
 import AppEntry from "./app/entry";
 import { PlatformProvider, type Platform } from "./app/context/platform";
 import { isTauriRuntime } from "./app/utils";
+import { t, currentLocale, initLocale } from "./i18n";
 
 bootstrapTheme();
+initLocale();
 
 const root = document.getElementById("root");
 
 if (!root) {
-  throw new Error("Root element not found");
+  throw new Error(t("app.root_element_not_found", currentLocale()));
 }
 
 const RouterComponent = isTauriRuntime() ? HashRouter : Router;

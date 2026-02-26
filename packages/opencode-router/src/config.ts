@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import dotenv from "dotenv";
+import { resolveRouterLangFromEnv, routerText } from "./i18n.js";
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const packageDir = path.resolve(moduleDir, "..");
@@ -239,7 +240,7 @@ export function loadConfig(
   let { config: configFile } = readConfigFile(configPath);
   const opencodeDirectory = env.OPENCODE_DIRECTORY?.trim() || configFile.opencodeDirectory || "";
   if (!opencodeDirectory && requireOpencode) {
-    throw new Error("OPENCODE_DIRECTORY is required");
+    throw new Error(routerText("directory_required", resolveRouterLangFromEnv()));
   }
   const resolvedDirectory = opencodeDirectory || process.cwd();
 

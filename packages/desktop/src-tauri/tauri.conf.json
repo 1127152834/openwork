@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "node ./scripts/tauri-before-dev.mjs",
     "beforeBuildCommand": "pnpm -C ../.. --filter @different-ai/openwork run prepare:sidecar && pnpm -w build:ui",
-    "devUrl": "http://localhost:5173",
+    "devUrl": "http://localhost:5273",
     "frontendDist": "../../app/dist"
   },
   "app": {

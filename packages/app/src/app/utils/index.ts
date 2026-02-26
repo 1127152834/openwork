@@ -10,6 +10,16 @@ import type {
   ProviderListItem,
 } from "../types";
 import type { WorkspaceInfo } from "../lib/tauri";
+import { currentLocale, t } from "../../i18n";
+
+const translate = (key: string) => t(key, currentLocale());
+const translateWithVars = (key: string, vars: Record<string, string | number>) => {
+  let message = translate(key);
+  for (const [varName, value] of Object.entries(vars)) {
+    message = message.replace(new RegExp(`\\{${varName}\\}`, "g"), String(value));
+  }
+  return message;
+};
 
 export function formatModelRef(model: ModelRef) {
   return `${model.providerID}/${model.modelID}`;
@@ -264,7 +274,7 @@ export function addOpencodeCacheHint(message: string) {
   ];
 
   if (cacheSignals.some((signal) => lower.includes(signal)) && lower.includes("enoent")) {
-    return `${message}\n\nOpenCode cache looks corrupted. Use Repair cache in Settings to rebuild it.`;
+    return `${message}\n\n${translate("utils.opencode_cache_corrupted_hint")}`;
   }
 
   return message;
@@ -308,12 +318,13 @@ export function isSandboxWorkspace(workspace: WorkspaceInfo) {
 
 export function getWorkspaceTaskLoadErrorDisplay(workspace: WorkspaceInfo, error?: string | null) {
   const raw = error?.trim() ?? "";
-  const fallbackTitle = raw || "Failed to load tasks";
+  const failedToLoadTasks = translate("utils.workspace_tasks_load_failed");
+  const fallbackTitle = raw || failedToLoadTasks;
   if (!raw || !isSandboxWorkspace(workspace)) {
     return {
       tone: "error" as const,
-      label: "Error",
-      message: "Failed to load tasks",
+      label: translate("utils.label_error"),
+      message: failedToLoadTasks,
       title: fallbackTitle,
     };
   }
@@ -327,16 +338,16 @@ export function getWorkspaceTaskLoadErrorDisplay(workspace: WorkspaceInfo, error
   if (!hasDockerHint && !(localHost && hasNetworkHint)) {
     return {
       tone: "error" as const,
-      label: "Error",
-      message: "Failed to load tasks",
+      label: translate("utils.label_error"),
+      message: failedToLoadTasks,
       title: fallbackTitle,
     };
   }
 
-  const message = "Sandbox is offline. Start Docker Desktop, then test connection.";
+  const message = translate("utils.workspace_sandbox_offline");
   return {
     tone: "offline" as const,
-    label: "Offline",
+    label: translate("utils.label_offline"),
     message,
     title: `${message}\n\n${raw}`,
   };
@@ -653,55 +664,59 @@ function buildToolTitle(state: any, toolName: string): string {
 
   if (lower === "read") {
     const target = file("filePath", "path", "file");
-    return target ? `Read ${target}` : "Read file";
+    return target ? translateWithVars("utils.step_read_target", { target }) : translate("utils.step_read_file");
   }
 
   if (lower === "edit") {
     const target = file("filePath", "path", "file");
-    return target ? `Edit ${target}` : "Edit file";
+    return target ? translateWithVars("utils.step_edit_target", { target }) : translate("utils.step_edit_file");
   }
 
   if (lower === "write") {
     const target = file("filePath", "path", "file");
-    return target ? `Write ${target}` : "Write file";
+    return target ? translateWithVars("utils.step_write_target", { target }) : translate("utils.step_write_file");
   }
 
   if (lower === "apply_patch") {
-    return "Apply patch";
+    return translate("utils.step_apply_patch");
   }
 
   if (lower === "list") {
     const target = file("path");
-    return target ? `List ${target}` : "List files";
+    return target ? translateWithVars("utils.step_list_target", { target }) : translate("utils.step_list_files");
   }
 
   if (lower === "grep" || lower === "glob") {
     const pattern = pick("pattern", "query");
-    return pattern ? `Search ${truncateStepText(pattern, 44)}` : "Search code";
+    return pattern
+      ? translateWithVars("utils.step_search_pattern", { pattern: truncateStepText(pattern, 44) })
+      : translate("utils.step_search_code");
   }
 
   if (lower === "bash") {
     const description = pick("description");
     if (description) return truncateStepText(description, 56);
     const command = pick("command", "cmd");
-    if (command) return truncateStepText(`Run ${command}`, 56);
-    return "Run command";
+    if (command) return truncateStepText(translateWithVars("utils.step_run_command_target", { command }), 56);
+    return translate("utils.step_run_command");
   }
 
   if (lower === "task") {
     const agent = formatAgentLabel(pick("subagent_type"));
-    if (agent) return `${agent} task`;
-    return "Task";
+    if (agent) return translateWithVars("utils.step_task_agent", { agent });
+    return translate("utils.step_task");
   }
 
   if (lower === "webfetch") {
     const url = pick("url");
-    return url ? `Fetch ${truncateStepText(url, 44)}` : "Fetch web page";
+    return url
+      ? translateWithVars("utils.step_fetch_url", { url: truncateStepText(url, 44) })
+      : translate("utils.step_fetch_web_page");
   }
 
   if (lower === "skill") {
     const name = pick("name");
-    return name ? `Load skill ${name}` : "Load skill";
+    return name ? translateWithVars("utils.step_load_skill_name", { name }) : translate("utils.step_load_skill");
   }
 
   const stateTitle = normalizeStepText(state?.title);
@@ -710,7 +725,7 @@ function buildToolTitle(state: any, toolName: string): string {
   }
 
   const fallback = normalizeStepText(toolName).replace(/[_-]+/g, " ");
-  return fallback || "Tool";
+  return fallback || translate("utils.step_tool");
 }
 
 /** Build a concise detail line for a tool call — avoids dumping raw output */
@@ -736,14 +751,14 @@ function buildToolDetail(state: any, toolName: string): string | undefined {
 
   if (lower === "grep" || lower === "glob") {
     const root = pick("path");
-    if (root) return `in ${normalizePathToken(root)}`;
+    if (root) return translateWithVars("utils.step_in_path", { path: normalizePathToken(root) });
   }
 
   if (lower === "task") {
     const description = pick("description");
     if (description) return truncateStepText(description, 80);
     const agent = formatAgentLabel(pick("subagent_type"));
-    if (agent) return `${agent} agent`;
+    if (agent) return translateWithVars("utils.step_agent_suffix", { agent });
   }
 
   if (lower === "webfetch") {
@@ -767,7 +782,7 @@ function buildToolDetail(state: any, toolName: string): string | undefined {
   if (Array.isArray(files) && files.length > 0) {
     const names = files.filter((f: any) => typeof f === "string").map(extractFilename);
     if (names.length === 1) return names[0];
-    if (names.length > 1) return `${names[0]} +${names.length - 1} more`;
+    if (names.length > 1) return translateWithVars("utils.step_more_files", { name: names[0], count: names.length - 1 });
   }
 
   // For bash/terminal commands, show the command
@@ -817,7 +832,7 @@ function buildToolDetail(state: any, toolName: string): string | undefined {
         // "Success. Updated the following files: M foo.ts" -> "foo.ts"
         const match = first.match(/:\s*[MADR]\s+(.+)/);
         if (match) return extractFilename(match[1].trim());
-        return "Done";
+        return translate("utils.step_done");
       }
       return first.length > 80 ? `${first.slice(0, 77)}...` : first;
     }
@@ -887,7 +902,7 @@ export function summarizeStep(part: Part): { title: string; detail?: string; isS
     
     // Detect skill trigger
     if (category === "skill") {
-      const skillName = state.metadata?.name || title.replace(/^(Loaded skill:\s*|Load skill\s+)/i, "");
+      const skillName = state.metadata?.name || title.replace(/^(Loaded skill:\s*|Load skill\s+|加载技能\s*)/i, "");
       return { title, isSkill: true, skillName, detail: finalDetail, toolCategory: category, status };
     }
     
@@ -897,7 +912,7 @@ export function summarizeStep(part: Part): { title: string; detail?: string; isS
   if (part.type === "reasoning") {
     const record = part as any;
     const text = typeof record.text === "string" ? cleanReasoningText(record.text) : "";
-    if (!text) return { title: "Thinking", toolCategory: "tool" };
+    if (!text) return { title: translate("part_view.thinking"), toolCategory: "tool" };
 
     const lines = text
       .split(/\r?\n/)
@@ -922,20 +937,20 @@ export function summarizeStep(part: Part): { title: string; detail?: string; isS
     }
 
     headline = headline.replace(/^thinking[:\s-]*/i, "").trim();
-    const title = `Thinking: ${truncateStepText(headline || "reviewing context", 96)}`;
+    const title = `${translate("utils.step_thinking_prefix")} ${truncateStepText(headline || translate("utils.step_reviewing_context"), 96)}`;
     return { title, detail: detail || undefined, toolCategory: "tool" };
   }
 
   if (part.type === "step-start" || part.type === "step-finish") {
     const reason = (part as any).reason;
     return {
-      title: part.type === "step-start" ? "Step started" : "Step finished",
+      title: part.type === "step-start" ? translate("part_view.step_started") : translate("part_view.step_finished"),
       detail: reason ? String(reason) : undefined,
       toolCategory: "tool",
     };
   }
 
-  return { title: "Step", toolCategory: "tool" };
+  return { title: translate("utils.step_default"), toolCategory: "tool" };
 }
 
 export function deriveArtifacts(list: MessageWithParts[], options: DeriveArtifactsOptions = {}): ArtifactItem[] {

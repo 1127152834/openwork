@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import solidPlugin from "../node_modules/@opentui/solid/scripts/solid-plugin";
+import solidPlugin from "@opentui/solid/bun-plugin";
 
 const bunRuntime = (globalThis as typeof globalThis & {
   Bun?: {

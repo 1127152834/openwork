@@ -3,7 +3,8 @@ import { spawnSync } from "node:child_process";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
-import { ApiError } from "./errors.js";
+import { apiError } from "./errors.js";
+import { tr } from "./i18n.js";
 import { exists, readJsonFile } from "./utils.js";
 
 export type ScheduledJobRun = {
@@ -54,13 +55,13 @@ const SUPPORTED_PLATFORMS = new Set(["darwin", "linux"]);
 
 function ensureSchedulerSupported() {
   if (SUPPORTED_PLATFORMS.has(process.platform)) return;
-  throw new ApiError(400, "scheduler_unsupported", "Scheduler is supported only on macOS and Linux.");
+  throw apiError(400, "scheduler_unsupported", tr("scheduler_supported_only_darwin_linux"));
 }
 
 function resolveHomeDir(): string {
   const home = homedir();
   if (!home) {
-    throw new ApiError(500, "home_dir_missing", "Failed to resolve home directory");
+    throw apiError(500, "home_dir_missing", tr("home_dir_resolve_failed"));
   }
   return home;
 }
@@ -257,7 +258,7 @@ export async function resolveScheduledJob(
   ensureSchedulerSupported();
   const trimmed = name.trim();
   if (!trimmed) {
-    throw new ApiError(400, "job_name_required", "name is required");
+    throw apiError(400, "job_name_required", tr("name_required"));
   }
 
   const entries = await loadAllJobEntries();
@@ -272,7 +273,7 @@ export async function resolveScheduledJob(
 
   const found = findJobEntryByName(filtered, trimmed);
   if (!found) {
-    throw new ApiError(404, "job_not_found", `Job "${trimmed}" not found.`);
+    throw apiError(404, "job_not_found", tr("scheduler_job_not_found_named", { name: trimmed }));
   }
 
   return {

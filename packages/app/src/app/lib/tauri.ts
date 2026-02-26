@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
+import { t, currentLocale } from "../../i18n";
 import { isTauriRuntime } from "../utils";
 import { validateMcpServerName } from "../mcp";
 
@@ -775,7 +776,7 @@ export async function opencodeDbMigrate(input: {
 }): Promise<ExecResult> {
   const safeProjectDir = input.projectDir.trim();
   if (!safeProjectDir) {
-    throw new Error("project_dir is required");
+    throw new Error(t("tauri.project_dir_required", currentLocale()));
   }
 
   return invoke<ExecResult>("opencode_db_migrate", {
@@ -791,7 +792,7 @@ export async function opencodeMcpAuth(
 ): Promise<ExecResult> {
   const safeProjectDir = projectDir.trim();
   if (!safeProjectDir) {
-    throw new Error("project_dir is required");
+    throw new Error(t("tauri.project_dir_required", currentLocale()));
   }
 
   const safeServerName = validateMcpServerName(serverName);

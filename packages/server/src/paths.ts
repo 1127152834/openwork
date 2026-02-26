@@ -1,10 +1,11 @@
 import { realpath } from "node:fs/promises";
 import { isAbsolute, resolve, sep } from "node:path";
-import { ApiError } from "./errors.js";
+import { apiError } from "./errors.js";
+import { tr } from "./i18n.js";
 
 export function assertAbsolute(path: string): void {
   if (!isAbsolute(path)) {
-    throw new ApiError(400, "invalid_path", "Path must be absolute");
+    throw apiError(400, "invalid_path", tr("path_must_be_absolute"));
   }
 }
 
@@ -14,7 +15,7 @@ export async function resolveWithinRoot(root: string, ...segments: string[]): Pr
   const resolvedCandidate = await realpath(candidate).catch(() => candidate);
   if (resolvedCandidate === resolvedRoot) return candidate;
   if (!resolvedCandidate.startsWith(resolvedRoot + sep)) {
-    throw new ApiError(400, "path_escape", "Path escapes workspace root");
+    throw apiError(400, "path_escape", tr("path_escapes_workspace_root"));
   }
   return candidate;
 }

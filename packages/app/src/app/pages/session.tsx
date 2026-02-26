@@ -32,16 +32,17 @@ import {
   HeartPulse,
   HardDrive,
   History,
+  Inbox,
   ListTodo,
   Loader2,
   MessageCircle,
   Maximize2,
   Minimize2,
   MoreHorizontal,
+  Paperclip,
   Plus,
   Redo2,
   Search,
-  Settings,
   Shield,
   SlidersHorizontal,
   Undo2,
@@ -77,6 +78,7 @@ import {
   normalizeDirectoryPath,
   parseTemplateFrontmatter,
 } from "../utils";
+import { deriveFileLedger, type FileLedgerItem } from "../utils/file-ledger";
 import { finishPerf, perfNow, recordPerfLog } from "../lib/perf-log";
 
 import browserSetupTemplate from "../data/commands/browser-setup.md?raw";
@@ -90,6 +92,19 @@ import QuestionModal from "../components/question-modal";
 import ArtifactsPanel from "../components/session/artifacts-panel";
 import InboxPanel from "../components/session/inbox-panel";
 import ArtifactMarkdownEditor from "../components/session/artifact-markdown-editor";
+import OpenWorkLogo from "../components/openwork-logo";
+import {
+  WORKSPACE_CENTER_SURFACE_CLASS,
+  WORKSPACE_DRAWER_SURFACE_CLASS,
+  WORKSPACE_LEFT_DRAWER_WIDTH_CLASS,
+  WORKSPACE_MAIN_CLASS,
+  WORKSPACE_PANEL_SURFACE_CLASS,
+  WORKSPACE_RIGHT_DRAWER_WIDTH_CLASS,
+  WORKSPACE_ROOT_CLASS,
+  WORKSPACE_TOPBAR_CLASS,
+  drawerRailClass,
+} from "../layout/workspace-shell";
+import { currentLocale, t } from "../../i18n";
 
 export type SessionViewProps = {
   selectedSessionId: string | null;
@@ -268,18 +283,42 @@ const STREAM_SCROLL_MIN_INTERVAL_MS = 90;
 const STREAM_RENDER_BATCH_MS = 220;
 const MAIN_THREAD_LAG_INTERVAL_MS = 200;
 const MAIN_THREAD_LAG_WARN_MS = 180;
+const SESSION_LEFT_DRAWER_OPEN_KEY = "openwork.session.leftDrawerOpen";
+const SESSION_INBOX_PANEL_OPEN_KEY = "openwork.session.inboxPanelOpen";
+const SESSION_ARTIFACTS_PANEL_OPEN_KEY = "openwork.session.artifactsPanelOpen";
+
+const readStoredBoolean = (key: string, fallback = false) => {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (raw == null) return fallback;
+    return raw === "1" || raw === "true";
+  } catch {
+    return fallback;
+  }
+};
+
+const writeStoredBoolean = (key: string, value: boolean) => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, value ? "1" : "0");
+  } catch {
+    // Ignore storage errors.
+  }
+};
 
 type CommandPaletteMode = "root" | "sessions" | "thinking";
 
 const COMMAND_PALETTE_THINKING_OPTIONS = [
-  { value: "none", label: "None", detail: "Fastest responses" },
-  { value: "low", label: "Low", detail: "Light reasoning" },
-  { value: "medium", label: "Medium", detail: "Balanced depth" },
-  { value: "high", label: "High", detail: "Deeper reasoning" },
-  { value: "xhigh", label: "X-High", detail: "Maximum effort" },
+  { value: "none", labelKey: "app.model_variant_none", detailKey: "session.thinking_fastest" },
+  { value: "low", labelKey: "app.model_variant_low", detailKey: "session.thinking_light" },
+  { value: "medium", labelKey: "app.model_variant_medium", detailKey: "session.thinking_balanced" },
+  { value: "high", labelKey: "app.model_variant_high", detailKey: "session.thinking_deeper" },
+  { value: "xhigh", labelKey: "app.model_variant_xhigh", detailKey: "session.thinking_maximum" },
 ] as const;
 
 export default function SessionView(props: SessionViewProps) {
+  const translate = (key: string) => t(key, currentLocale());
   let messagesEndEl: HTMLDivElement | undefined;
   let bottomVisibilityEl: HTMLDivElement | undefined;
   let chatContainerEl: HTMLDivElement | undefined;
@@ -331,21 +370,21 @@ export default function SessionView(props: SessionViewProps) {
   let commandPaletteInputEl: HTMLInputElement | undefined;
   const commandPaletteOptionRefs: HTMLButtonElement[] = [];
 
-  const agentLabel = createMemo(() => props.selectedSessionAgent ?? "Default agent");
+  const agentLabel = createMemo(() => props.selectedSessionAgent ?? translate("session.default_agent"));
   const workspaceLabel = (workspace: WorkspaceInfo) =>
     workspace.displayName?.trim() ||
     workspace.openworkWorkspaceName?.trim() ||
     workspace.name?.trim() ||
     workspace.path?.trim() ||
-    "Worker";
+    translate("skills.worker_fallback");
   const workspaceKindLabel = (workspace: WorkspaceInfo) =>
     workspace.workspaceType === "remote"
       ? workspace.sandboxBackend === "docker" ||
         Boolean(workspace.sandboxRunId?.trim()) ||
         Boolean(workspace.sandboxContainerName?.trim())
-        ? "Sandbox"
-        : "Remote"
-      : "Local";
+        ? translate("dashboard.sandbox")
+        : translate("dashboard.remote")
+      : translate("skills.mode_local");
   const todoList = createMemo(() => props.todos.filter((todo) => todo.content.trim()));
   const todoCount = createMemo(() => todoList().length);
   const todoCompletedCount = createMemo(() =>
@@ -369,7 +408,7 @@ export default function SessionView(props: SessionViewProps) {
       for (const session of group.sessions) {
         const sessionId = session.id?.trim() ?? "";
         if (!sessionId) continue;
-        const title = session.title?.trim() || "Untitled session";
+        const title = session.title?.trim() || translate("common.untitled");
         const slug = session.slug?.trim() ?? "";
         const updatedAt = session.time?.updated ?? session.time?.created ?? 0;
         out.push({
@@ -712,34 +751,49 @@ export default function SessionView(props: SessionViewProps) {
 
   const canCompactSession = createMemo(() => Boolean(props.selectedSessionId) && hasUserMessages());
 
-  const touchedFiles = createMemo(() => {
-    const out: string[] = [];
+  const fileLedger = createMemo(() => deriveFileLedger(props.messages, { maxMessages: 360 }));
+
+  const sidebarFiles = createMemo<FileLedgerItem[]>(() => {
+    const primary = fileLedger().all;
+    if (primary.length > 0) return primary.slice(0, 96);
+
+    const out: FileLedgerItem[] = [];
     const seen = new Set<string>();
-    const add = (value: string) => {
-      const normalized = String(value ?? "").trim().replace(/[\\/]+/g, "/");
+    const push = (rawPath: string, category: "output" | "reference" | "input" = "output") => {
+      const normalized = String(rawPath ?? "").trim().replace(/[\\/]+/g, "/");
       if (!normalized) return;
       const key = normalized.toLowerCase();
       if (seen.has(key)) return;
       seen.add(key);
-      out.push(normalized);
+      out.push({
+        id: `fallback-${encodeURIComponent(normalized)}`,
+        path: normalized,
+        name: normalized.split("/").pop() ?? normalized,
+        category,
+        source: "tool",
+        firstSeenAt: out.length + 1,
+        lastSeenAt: out.length + 1,
+      });
     };
 
-    const artifacts = props.artifacts;
-    for (let idx = artifacts.length - 1; idx >= 0; idx -= 1) {
-      const item = artifacts[idx];
-      add(item?.path ?? item?.name ?? "");
-      if (out.length >= 48) break;
+    for (let idx = props.artifacts.length - 1; idx >= 0; idx -= 1) {
+      const item = props.artifacts[idx];
+      push(item?.path ?? item?.name ?? "", "output");
+      if (out.length >= 96) break;
     }
-
     if (out.length === 0) {
-      const working = props.workingFiles;
-      for (let idx = working.length - 1; idx >= 0; idx -= 1) {
-        add(working[idx] ?? "");
-        if (out.length >= 48) break;
+      for (let idx = props.workingFiles.length - 1; idx >= 0; idx -= 1) {
+        push(props.workingFiles[idx] ?? "", "output");
+        if (out.length >= 96) break;
       }
     }
-
     return out;
+  });
+
+  const touchedFiles = createMemo(() => {
+    return sidebarFiles()
+      .map((item) => item.path)
+      .slice(0, 48);
   });
 
   const normalizeSidebarPath = (value: string) => String(value ?? "").trim().replace(/[\\/]+/g, "/");
@@ -889,13 +943,42 @@ export default function SessionView(props: SessionViewProps) {
   const showMoreLabel = (workspaceId: string, total: number) => {
     const remaining = Math.max(0, total - previewCount(workspaceId));
     const nextCount = Math.min(MAX_SESSIONS_PREVIEW, remaining);
-    return nextCount > 0 ? `Show ${nextCount} more` : "Show more";
+    return nextCount > 0
+      ? translate("dashboard.show_more_count").replace("{count}", String(nextCount))
+      : translate("dashboard.show_more");
   };
   const [workspaceMenuId, setWorkspaceMenuId] = createSignal<string | null>(null);
   let workspaceMenuRef: HTMLDivElement | undefined;
   const [shareWorkspaceId, setShareWorkspaceId] = createSignal<string | null>(null);
   const [addWorkspaceMenuOpen, setAddWorkspaceMenuOpen] = createSignal(false);
   let addWorkspaceMenuRef: HTMLDivElement | undefined;
+  const [workspaceSwitcherOpen, setWorkspaceSwitcherOpen] = createSignal(false);
+  const [sessionSwitcherOpen, setSessionSwitcherOpen] = createSignal(false);
+  const [rightDrawerOpen, setRightDrawerOpen] = createSignal(
+    readStoredBoolean(SESSION_LEFT_DRAWER_OPEN_KEY, false),
+  );
+  const [inboxPanelOpen, setInboxPanelOpen] = createSignal(
+    readStoredBoolean(SESSION_INBOX_PANEL_OPEN_KEY, false),
+  );
+  const [artifactsPanelOpen, setArtifactsPanelOpen] = createSignal(
+    readStoredBoolean(SESSION_ARTIFACTS_PANEL_OPEN_KEY, false),
+  );
+  let workspaceSwitcherRef: HTMLDivElement | undefined;
+  let sessionSwitcherRef: HTMLDivElement | undefined;
+  const closeRightDrawer = () => setRightDrawerOpen(false);
+  const toggleRightDrawer = () => setRightDrawerOpen((prev) => !prev);
+
+  createEffect(() => {
+    writeStoredBoolean(SESSION_LEFT_DRAWER_OPEN_KEY, rightDrawerOpen());
+  });
+
+  createEffect(() => {
+    writeStoredBoolean(SESSION_INBOX_PANEL_OPEN_KEY, inboxPanelOpen());
+  });
+
+  createEffect(() => {
+    writeStoredBoolean(SESSION_ARTIFACTS_PANEL_OPEN_KEY, artifactsPanelOpen());
+  });
 
   createEffect(() => {
     if (!workspaceMenuId()) return;
@@ -928,6 +1011,19 @@ export default function SessionView(props: SessionViewProps) {
     };
     window.addEventListener("click", closeMenu);
     onCleanup(() => window.removeEventListener("click", closeMenu));
+  });
+
+  createEffect(() => {
+    if (!workspaceSwitcherOpen() && !sessionSwitcherOpen()) return;
+    const closeMenus = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (workspaceSwitcherRef && target && workspaceSwitcherRef.contains(target)) return;
+      if (sessionSwitcherRef && target && sessionSwitcherRef.contains(target)) return;
+      setWorkspaceSwitcherOpen(false);
+      setSessionSwitcherOpen(false);
+    };
+    window.addEventListener("click", closeMenus);
+    onCleanup(() => window.removeEventListener("click", closeMenus));
   });
 
   const scrollToLatest = (behavior: ScrollBehavior = "auto") => {
@@ -1016,12 +1112,12 @@ export default function SessionView(props: SessionViewProps) {
     if (!trimmed) return;
 
     if (props.activeWorkspaceDisplay.workspaceType === "remote") {
-      setToastMessage("File open is unavailable for remote workers.");
+      setToastMessage(translate("session.file_open_remote_unavailable"));
       return;
     }
 
     if (!isTauriRuntime()) {
-      setToastMessage("File open is available in the desktop app.");
+      setToastMessage(translate("session.file_open_desktop_only"));
       return;
     }
 
@@ -1029,13 +1125,13 @@ export default function SessionView(props: SessionViewProps) {
       const { openPath } = await import("@tauri-apps/plugin-opener");
       const root = props.activeWorkspaceRoot.trim();
       if (!isAbsolutePath(trimmed) && !root) {
-        setToastMessage("Pick a worker to open files.");
+        setToastMessage(translate("session.pick_worker_to_open_files"));
         return;
       }
       const target = !isAbsolutePath(trimmed) && root ? await join(root, trimmed) : trimmed;
       await openPath(target);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to open file";
+      const message = error instanceof Error ? error.message : translate("session.unable_to_open_file");
       setToastMessage(message);
     }
   };
@@ -1052,7 +1148,7 @@ export default function SessionView(props: SessionViewProps) {
       setAgentPickerReady(true);
       return sorted;
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to load agents";
+      const message = error instanceof Error ? error.message : translate("session.failed_to_load_agents");
       setAgentPickerError(message);
       setAgentOptions([]);
       return [];
@@ -1170,26 +1266,26 @@ export default function SessionView(props: SessionViewProps) {
       const tool = typeof record.tool === "string" ? record.tool : "";
       switch (tool) {
         case "task":
-          return "Delegating";
+          return translate("session.status_delegating");
         case "todowrite":
         case "todoread":
-          return "Planning";
+          return translate("session.status_planning");
         case "read":
-          return "Gathering context";
+          return translate("session.status_gathering_context");
         case "list":
         case "grep":
         case "glob":
-          return "Searching codebase";
+          return translate("session.status_searching_codebase");
         case "webfetch":
-          return "Searching the web";
+          return translate("session.status_searching_web");
         case "edit":
         case "write":
         case "apply_patch":
-          return "Writing file";
+          return translate("session.status_writing_file");
         case "bash":
-          return "Running shell";
+          return translate("session.status_running_shell");
         default:
-          return "Working";
+          return translate("session.status_working");
       }
     }
     if (part.type === "reasoning") {
@@ -1200,12 +1296,12 @@ export default function SessionView(props: SessionViewProps) {
         .find(Boolean);
       if (first) {
         const clipped = first.length > 56 ? `${first.slice(0, 53)}...` : first;
-        return `Thinking: ${clipped}`;
+        return `${translate("utils.step_thinking_prefix")} ${clipped}`;
       }
-      return "Thinking";
+      return translate("part_view.thinking");
     }
     if (part.type === "text") {
-      return "Gathering thoughts";
+      return translate("session.status_gathering_thoughts");
     }
     return null;
   };
@@ -1213,22 +1309,22 @@ export default function SessionView(props: SessionViewProps) {
   const thinkingStatus = createMemo(() => {
     const status = computeStatusFromPart(latestRunPart());
     if (status) return status;
-    if (runPhase() === "thinking") return "Thinking";
+    if (runPhase() === "thinking") return translate("part_view.thinking");
     return null;
   });
 
   const runLabel = createMemo(() => {
     switch (runPhase()) {
       case "sending":
-        return "Sending";
+        return translate("session.run_sending");
       case "retrying":
-        return "Retrying";
+        return translate("session.run_retrying");
       case "responding":
-        return "Responding";
+        return translate("session.run_responding");
       case "thinking":
-        return "Thinking";
+        return translate("part_view.thinking");
       case "error":
-        return "Run failed";
+        return translate("session.run_failed");
       default:
         return "";
     }
@@ -1540,17 +1636,17 @@ export default function SessionView(props: SessionViewProps) {
   const cancelRun = async () => {
     if (abortBusy()) return;
     if (!props.selectedSessionId) {
-      setToastMessage("No session selected");
+      setToastMessage(translate("session.no_selected"));
       return;
     }
 
     setAbortBusy(true);
-    setToastMessage("Stopping the run...");
+    setToastMessage(translate("session.stopping_run"));
     try {
       await props.abortSession(props.selectedSessionId);
       setToastMessage("Stopped.");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to stop";
+      const message = error instanceof Error ? error.message : translate("session.failed_to_stop");
       setToastMessage(message);
     } finally {
       setAbortBusy(false);
@@ -1560,13 +1656,13 @@ export default function SessionView(props: SessionViewProps) {
   const retryRun = async () => {
     const text = props.lastPromptSent.trim();
     if (!text) {
-      setToastMessage("Nothing to retry yet");
+      setToastMessage(translate("session.nothing_to_retry"));
       return;
     }
 
     if (abortBusy()) return;
     setAbortBusy(true);
-    setToastMessage("Trying again...");
+    setToastMessage(translate("session.trying_again"));
     try {
       if (showRunIndicator() && props.selectedSessionId) {
         await props.abortSession(props.selectedSessionId);
@@ -1650,17 +1746,17 @@ export default function SessionView(props: SessionViewProps) {
   const undoLastMessage = async () => {
     if (historyActionBusy()) return;
     if (!canUndoLastMessage()) {
-      setToastMessage("Nothing to undo yet.");
+      setToastMessage(translate("session.nothing_to_undo"));
       return;
     }
 
     setHistoryActionBusy("undo");
     try {
       await props.undoLastUserMessage();
-      setToastMessage("Reverted the last user message.");
+      setToastMessage(translate("session.undo_success"));
     } catch (error) {
       const message = error instanceof Error ? error.message : props.safeStringify(error);
-      setToastMessage(message || "Failed to undo");
+      setToastMessage(message || translate("session.undo_failed"));
     } finally {
       setHistoryActionBusy(null);
     }
@@ -1669,17 +1765,17 @@ export default function SessionView(props: SessionViewProps) {
   const redoLastMessage = async () => {
     if (historyActionBusy()) return;
     if (!canRedoLastMessage()) {
-      setToastMessage("Nothing to redo.");
+      setToastMessage(translate("session.nothing_to_redo"));
       return;
     }
 
     setHistoryActionBusy("redo");
     try {
       await props.redoLastUserMessage();
-      setToastMessage("Restored the reverted message.");
+      setToastMessage(translate("session.redo_success"));
     } catch (error) {
       const message = error instanceof Error ? error.message : props.safeStringify(error);
-      setToastMessage(message || "Failed to redo");
+      setToastMessage(message || translate("session.redo_failed"));
     } finally {
       setHistoryActionBusy(null);
     }
@@ -1688,23 +1784,23 @@ export default function SessionView(props: SessionViewProps) {
   const compactSessionHistory = async () => {
     if (historyActionBusy()) return;
     if (!canCompactSession()) {
-      setToastMessage("Nothing to compact yet.");
+      setToastMessage(translate("session.nothing_to_compact"));
       return;
     }
 
     const sessionID = props.selectedSessionId;
     const startedAt = perfNow();
     setHistoryActionBusy("compact");
-    setToastMessage("Compacting session context...");
+    setToastMessage(translate("session.compacting_context"));
     try {
       await props.compactSession();
-      setToastMessage("Session compacted.");
+      setToastMessage(translate("session.compact_success"));
       finishPerf(props.developerMode, "session.compact", "ui-done", startedAt, {
         sessionID,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : props.safeStringify(error);
-      setToastMessage(message || "Failed to compact session");
+      setToastMessage(message || translate("session.compact_failed"));
       finishPerf(props.developerMode, "session.compact", "ui-error", startedAt, {
         sessionID,
         error: message,
@@ -1750,7 +1846,7 @@ export default function SessionView(props: SessionViewProps) {
     const prev = prevTodoCount();
     if (count > prev && prev > 0) {
       const lastMsg = chatContainerEl?.querySelector('[data-message-role="assistant"]:last-child');
-      triggerFlyout(lastMsg ?? null, "sidebar-progress", "New Task", "check");
+      triggerFlyout(lastMsg ?? null, "sidebar-progress", translate("session.new_task"), "check");
     }
     setPrevTodoCount(count);
   });
@@ -1761,7 +1857,7 @@ export default function SessionView(props: SessionViewProps) {
     const prev = prevFileCount();
     if (count > prev && prev > 0) {
       const lastMsg = chatContainerEl?.querySelector('[data-message-role="assistant"]:last-child');
-      triggerFlyout(lastMsg ?? null, "sidebar-context", "File Modified", "folder");
+      triggerFlyout(lastMsg ?? null, "sidebar-context", translate("session.file_modified"), "folder");
     }
     setPrevFileCount(count);
   });
@@ -1782,6 +1878,16 @@ export default function SessionView(props: SessionViewProps) {
     return "";
   });
 
+  const activeWorkspaceGroup = createMemo(() =>
+    props.workspaceSessionGroups.find((group) => group.workspace.id === props.activeWorkspaceId) ?? null,
+  );
+
+  const activeWorkspaceTitle = createMemo(() => {
+    const group = activeWorkspaceGroup();
+    if (!group) return translate("skills.worker_fallback");
+    return workspaceLabel(group.workspace);
+  });
+
   const renameCanSave = createMemo(() => {
     if (renameBusy()) return false;
     const next = renameTitle().trim();
@@ -1792,7 +1898,7 @@ export default function SessionView(props: SessionViewProps) {
   const openRenameModal = () => {
     setSessionMenuOpen(false);
     if (!props.selectedSessionId) {
-      setToastMessage("No session selected");
+      setToastMessage(translate("session.no_selected"));
       return;
     }
     setRenameTitle(selectedSessionTitle());
@@ -1824,7 +1930,7 @@ export default function SessionView(props: SessionViewProps) {
   const openDeleteSessionModal = () => {
     setSessionMenuOpen(false);
     if (!props.selectedSessionId) {
-      setToastMessage("No session selected");
+      setToastMessage(translate("session.no_selected"));
       return;
     }
     setDeleteSessionOpen(true);
@@ -1843,12 +1949,12 @@ export default function SessionView(props: SessionViewProps) {
     try {
       await props.deleteSession(sessionId);
       setDeleteSessionOpen(false);
-      setToastMessage("Session deleted");
+      setToastMessage(translate("session.session_deleted"));
       // Route away from the deleted session id.
       props.setView("session");
     } catch (error) {
       const message = error instanceof Error ? error.message : props.safeStringify(error);
-      setToastMessage(message || "Failed to delete session");
+      setToastMessage(message || translate("session.failed_to_delete_session"));
     } finally {
       setDeleteSessionBusy(false);
     }
@@ -1857,7 +1963,7 @@ export default function SessionView(props: SessionViewProps) {
   const requireSessionId = () => {
     const sessionId = props.selectedSessionId;
     if (!sessionId) {
-      setToastMessage("No session selected");
+      setToastMessage(translate("session.no_selected"));
       return null;
     }
     return sessionId;
@@ -1904,7 +2010,7 @@ export default function SessionView(props: SessionViewProps) {
 
   const handleProviderAuthSelect = async (providerId: string): Promise<ProviderOAuthStartResult> => {
     if (providerAuthActionBusy()) {
-      throw new Error("Provider auth is already in progress.");
+      throw new Error(translate("session.provider_auth_in_progress"));
     }
     setProviderAuthActionBusy(true);
     try {
@@ -1919,10 +2025,10 @@ export default function SessionView(props: SessionViewProps) {
     setProviderAuthActionBusy(true);
     try {
       const message = await props.completeProviderAuthOAuth(providerId, methodIndex, code);
-      setToastMessage(message || "Provider connected");
+      setToastMessage(message || translate("session.provider_connected"));
       props.closeProviderAuthModal();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "OAuth failed";
+      const message = error instanceof Error ? error.message : translate("session.oauth_failed");
       setToastMessage(message);
     } finally {
       setProviderAuthActionBusy(false);
@@ -1934,10 +2040,10 @@ export default function SessionView(props: SessionViewProps) {
     setProviderAuthActionBusy(true);
     try {
       const message = await props.submitProviderApiKey(providerId, apiKey);
-      setToastMessage(message || "API key saved");
+      setToastMessage(message || translate("session.api_key_saved"));
       props.closeProviderAuthModal();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to save API key";
+      const message = error instanceof Error ? error.message : translate("session.failed_save_api_key");
       setToastMessage(message);
     } finally {
       setProviderAuthActionBusy(false);
@@ -2051,30 +2157,30 @@ export default function SessionView(props: SessionViewProps) {
       });
       return [
         {
-          label: "OpenWork invite link",
+          label: translate("session.share_openwork_invite_link"),
           value: inviteUrl,
           secret: true,
-          placeholder: !isTauriRuntime() ? "Desktop app required" : "Starting server...",
-          hint: "One link that prefills worker URL and token.",
+          placeholder: !isTauriRuntime() ? translate("session.desktop_required") : translate("session.starting_server"),
+          hint: translate("session.share_invite_link_hint"),
         },
         {
-          label: "OpenWork worker URL",
+          label: translate("session.share_openwork_worker_url"),
           value: url,
-          placeholder: !isTauriRuntime() ? "Desktop app required" : "Starting server...",
+          placeholder: !isTauriRuntime() ? translate("session.desktop_required") : translate("session.starting_server"),
           hint: mountedUrl
-            ? "Use on phones or laptops connecting to this worker."
+            ? translate("session.share_worker_url_hint_worker")
             : hostUrl
-              ? "Worker URL is resolving; host URL shown as fallback."
+              ? translate("session.share_worker_url_hint_fallback")
               : undefined,
         },
         {
-          label: "Access token",
+          label: translate("session.share_access_token"),
           value: token,
           secret: true,
-          placeholder: isTauriRuntime() ? "-" : "Desktop app required",
+          placeholder: isTauriRuntime() ? "-" : translate("session.desktop_required"),
           hint: mountedUrl
-            ? "Use on phones or laptops connecting to this worker."
-            : "Use on phones or laptops connecting to this host.",
+            ? translate("session.share_access_token_hint_worker")
+            : translate("session.share_access_token_hint_host"),
         },
       ];
     }
@@ -2092,21 +2198,21 @@ export default function SessionView(props: SessionViewProps) {
       });
       return [
         {
-          label: "OpenWork invite link",
+          label: translate("session.share_openwork_invite_link"),
           value: inviteUrl,
           secret: true,
-          hint: "One link that prefills worker URL and token.",
+          hint: translate("session.share_invite_link_hint"),
         },
         {
-          label: "OpenWork worker URL",
+          label: translate("session.share_openwork_worker_url"),
           value: url,
         },
         {
-          label: "Access token",
+          label: translate("session.share_access_token"),
           value: token,
           secret: true,
-          placeholder: token ? undefined : "Set token in workspace settings",
-          hint: "This token grants access to the worker on that host.",
+          placeholder: token ? undefined : translate("session.share_set_token_in_workspace"),
+          hint: translate("session.share_access_token_hint_remote"),
         },
       ];
     }
@@ -2115,13 +2221,13 @@ export default function SessionView(props: SessionViewProps) {
     const directory = ws.directory?.trim() || "";
     return [
       {
-        label: "OpenCode base URL",
+        label: translate("session.share_opencode_base_url"),
         value: baseUrl,
       },
       {
-        label: "Directory",
+        label: translate("session.share_directory"),
         value: directory,
-        placeholder: "(auto)",
+        placeholder: translate("session.share_directory_auto"),
       },
     ];
   });
@@ -2130,28 +2236,28 @@ export default function SessionView(props: SessionViewProps) {
     const ws = shareWorkspace();
     if (!ws) return null;
     if (ws.workspaceType === "local" && props.engineInfo?.runtime === "direct") {
-      return "Engine runtime is set to Direct. Switching local workers can restart the host and disconnect clients. The token may change after a restart.";
+      return translate("session.share_note_direct_runtime");
     }
     return null;
   });
 
   const shareServiceDisabledReason = createMemo(() => {
     const ws = shareWorkspace();
-    if (!ws) return "Select a worker first.";
+    if (!ws) return translate("session.share_select_worker_first");
     if (ws.workspaceType === "remote" && ws.remoteType !== "openwork") {
-      return "Share service links are available for OpenWork workers.";
+      return translate("session.share_openwork_only");
     }
     if (ws.workspaceType !== "remote") {
       const baseUrl = props.openworkServerHostInfo?.baseUrl?.trim() ?? "";
       const token = props.openworkServerHostInfo?.clientToken?.trim() ?? "";
       if (!baseUrl || !token) {
-        return "Local OpenWork host is not ready yet.";
+        return translate("session.share_local_host_not_ready");
       }
     } else {
       const hostUrl = ws.openworkHostUrl?.trim() || ws.baseUrl?.trim() || "";
       const token = ws.openworkToken?.trim() || props.openworkServerSettings.token?.trim() || "";
-      if (!hostUrl) return "Missing OpenWork host URL.";
-      if (!token) return "Missing OpenWork token.";
+      if (!hostUrl) return translate("session.share_missing_openwork_host_url");
+      if (!token) return translate("session.share_missing_openwork_token");
     }
     return null;
   });
@@ -2163,14 +2269,14 @@ export default function SessionView(props: SessionViewProps) {
   }> => {
     const ws = shareWorkspace();
     if (!ws) {
-      throw new Error("Select a worker first.");
+      throw new Error(translate("session.share_select_worker_first"));
     }
 
     if (ws.workspaceType !== "remote") {
       const baseUrl = props.openworkServerHostInfo?.baseUrl?.trim() ?? "";
       const token = props.openworkServerHostInfo?.clientToken?.trim() ?? "";
       if (!baseUrl || !token) {
-        throw new Error("Local OpenWork host is not ready yet.");
+        throw new Error(translate("session.share_local_host_not_ready"));
       }
       const client = createOpenworkServerClient({ baseUrl, token });
 
@@ -2185,20 +2291,20 @@ export default function SessionView(props: SessionViewProps) {
       }
 
       if (!workspaceId) {
-        throw new Error("Could not resolve this worker on the local OpenWork host.");
+        throw new Error(translate("session.share_resolve_local_worker_failed"));
       }
 
       return { client, workspaceId, workspace: ws };
     }
 
     if (ws.remoteType !== "openwork") {
-      throw new Error("Share service links are available for OpenWork workers.");
+      throw new Error(translate("session.share_openwork_only"));
     }
 
     const hostUrl = ws.openworkHostUrl?.trim() || ws.baseUrl?.trim() || "";
     const token = ws.openworkToken?.trim() || props.openworkServerSettings.token?.trim() || "";
     if (!hostUrl || !token) {
-      throw new Error("OpenWork host URL and token are required.");
+      throw new Error(translate("session.share_host_url_token_required"));
     }
 
     const client = createOpenworkServerClient({ baseUrl: hostUrl, token });
@@ -2225,7 +2331,7 @@ export default function SessionView(props: SessionViewProps) {
     }
 
     if (!workspaceId) {
-      throw new Error("Could not resolve this worker on the OpenWork host.");
+      throw new Error(translate("session.share_resolve_remote_worker_failed"));
     }
 
     return { client, workspaceId, workspace: ws };
@@ -2244,7 +2350,7 @@ export default function SessionView(props: SessionViewProps) {
         schemaVersion: 1,
         type: "workspace-profile",
         name: `${workspaceLabel(workspace)} profile`,
-        description: "Full OpenWork workspace profile with config, MCP setup, commands, and skills.",
+        description: translate("session.share_workspace_profile_description"),
         workspace: exported,
       };
 
@@ -2261,7 +2367,7 @@ export default function SessionView(props: SessionViewProps) {
         // ignore
       }
     } catch (error) {
-      setShareWorkspaceProfileError(error instanceof Error ? error.message : "Failed to publish workspace profile");
+      setShareWorkspaceProfileError(error instanceof Error ? error.message : translate("session.share_workspace_profile_publish_failed"));
     } finally {
       setShareWorkspaceProfileBusy(false);
     }
@@ -2278,14 +2384,14 @@ export default function SessionView(props: SessionViewProps) {
       const exported = await client.exportWorkspace(workspaceId);
       const skills = Array.isArray(exported.skills) ? exported.skills : [];
       if (!skills.length) {
-        throw new Error("No skills found in this workspace.");
+        throw new Error(translate("session.share_no_skills_found"));
       }
 
       const payload: SkillsSetBundleV1 = {
         schemaVersion: 1,
         type: "skills-set",
         name: `${workspaceLabel(workspace)} skills`,
-        description: "Complete skills set from an OpenWork workspace.",
+        description: translate("session.share_skills_set_description"),
         skills: skills.map((skill) => ({
           name: skill.name,
           description: skill.description,
@@ -2311,7 +2417,7 @@ export default function SessionView(props: SessionViewProps) {
         // ignore
       }
     } catch (error) {
-      setShareSkillsSetError(error instanceof Error ? error.message : "Failed to publish skills set");
+      setShareSkillsSetError(error instanceof Error ? error.message : translate("session.share_skills_set_publish_failed"));
     } finally {
       setShareSkillsSetBusy(false);
     }
@@ -2319,10 +2425,10 @@ export default function SessionView(props: SessionViewProps) {
 
   const exportDisabledReason = createMemo(() => {
     const ws = shareWorkspace();
-    if (!ws) return "Export is available for local workers in the desktop app.";
-    if (ws.workspaceType === "remote") return "Export is only supported for local workers.";
-    if (!isTauriRuntime()) return "Export is available in the desktop app.";
-    if (props.exportWorkspaceBusy) return "Export is already running.";
+    if (!ws) return translate("dashboard.export_desktop_local_only");
+    if (ws.workspaceType === "remote") return translate("dashboard.export_local_only");
+    if (!isTauriRuntime()) return translate("dashboard.export_desktop_only");
+    if (props.exportWorkspaceBusy) return translate("dashboard.export_running");
     return null;
   });
 
@@ -2382,7 +2488,7 @@ export default function SessionView(props: SessionViewProps) {
       // Fall back to prompt-based setup below.
     }
 
-    const text = SOUL_SETUP_TEMPLATE.body || "Give me a soul.";
+    const text = SOUL_SETUP_TEMPLATE.body || translate("session.quickstart_soul_fallback");
     handleSendPrompt({
       mode: "prompt",
       text,
@@ -2403,15 +2509,17 @@ export default function SessionView(props: SessionViewProps) {
     const workspaceId = props.openworkServerWorkspaceId?.trim() ?? "";
     if (!client || !workspaceId) {
       if (notify) {
-        setToastMessage("Connect to the OpenWork server to upload inbox files.");
+        setToastMessage(translate("session.inbox_connect_server_first"));
       }
       return [];
     }
     if (!files.length) return [];
 
-    const label = files.length === 1 ? files[0]?.name ?? "file" : `${files.length} files`;
+    const label = files.length === 1
+      ? files[0]?.name ?? translate("session.file_label")
+      : translate("session.files_count").replace("{count}", String(files.length));
     if (notify) {
-      setToastMessage(`Uploading ${label} to inbox...`);
+      setToastMessage(translate("session.uploading_to_inbox").replace("{label}", label));
     }
 
     try {
@@ -2423,12 +2531,16 @@ export default function SessionView(props: SessionViewProps) {
       }
       if (notify) {
         const summary = uploaded.map((file) => file.name).filter(Boolean).join(", ");
-        setToastMessage(summary ? `Uploaded to inbox: ${summary}` : "Uploaded to inbox.");
+        setToastMessage(
+          summary
+            ? translate("session.uploaded_to_inbox_summary").replace("{summary}", summary)
+            : translate("session.uploaded_to_inbox")
+        );
       }
       return uploaded;
     } catch (error) {
       if (notify) {
-        const message = error instanceof Error ? error.message : "Inbox upload failed";
+        const message = error instanceof Error ? error.message : translate("session.inbox_upload_failed");
         setToastMessage(message);
       }
       return [];
@@ -2471,22 +2583,25 @@ export default function SessionView(props: SessionViewProps) {
     const items: CommandPaletteItem[] = [
       {
         id: "new-session",
-        title: "Create new session",
-        detail: "Start a fresh task in the current worker",
-        meta: "Create",
+        title: translate("session.command_palette_new_session_title"),
+        detail: translate("session.command_palette_new_session_detail"),
+        meta: translate("session.command_palette_meta_create"),
         action: () => {
           closeCommandPalette();
           void Promise.resolve(props.createSessionAndOpen()).catch((error) => {
-            const message = error instanceof Error ? error.message : "Failed to create session";
+            const message = error instanceof Error ? error.message : translate("session.create_session_failed");
             setToastMessage(message);
           });
         },
       },
       {
         id: "sessions",
-        title: "Search sessions",
-        detail: `${totalSessionCount().toLocaleString()} available across workers`,
-        meta: "Jump",
+        title: translate("session.command_palette_search_sessions_title"),
+        detail: translate("session.command_palette_search_sessions_detail").replace(
+          "{count}",
+          totalSessionCount().toLocaleString(),
+        ),
+        meta: translate("session.command_palette_meta_jump"),
         action: () => {
           setCommandPaletteMode("sessions");
           setCommandPaletteQuery("");
@@ -2496,9 +2611,12 @@ export default function SessionView(props: SessionViewProps) {
       },
       {
         id: "model",
-        title: "Change model",
-        detail: `Current: ${props.selectedSessionModelLabel || "Model"}`,
-        meta: "Open",
+        title: translate("session.command_palette_change_model_title"),
+        detail: translate("session.command_palette_current_model").replace(
+          "{model}",
+          props.selectedSessionModelLabel || translate("settings.model_title"),
+        ),
+        meta: translate("session.command_palette_meta_open"),
         action: () => {
           closeCommandPalette();
           props.openSessionModelPicker();
@@ -2506,22 +2624,22 @@ export default function SessionView(props: SessionViewProps) {
       },
       {
         id: "provider",
-        title: "Connect provider",
-        detail: "Open provider connection flow",
-        meta: "Open",
+        title: translate("session.command_palette_connect_provider_title"),
+        detail: translate("session.command_palette_connect_provider_detail"),
+        meta: translate("session.command_palette_meta_open"),
         action: () => {
           closeCommandPalette();
           void props.openProviderAuthModal().catch((error) => {
-            const message = error instanceof Error ? error.message : "Failed to load providers";
+            const message = error instanceof Error ? error.message : translate("app.provider_load_failed");
             setToastMessage(message);
           });
         },
       },
       {
         id: "thinking",
-        title: "Change thinking",
-        detail: `Current: ${props.modelVariantLabel}`,
-        meta: "Adjust",
+        title: translate("session.command_palette_change_thinking_title"),
+        detail: translate("session.command_palette_current_thinking").replace("{label}", props.modelVariantLabel),
+        meta: translate("session.command_palette_meta_adjust"),
         action: () => {
           setCommandPaletteMode("thinking");
           setCommandPaletteQuery("");
@@ -2546,7 +2664,9 @@ export default function SessionView(props: SessionViewProps) {
       id: `session:${item.workspaceId}:${item.sessionId}`,
       title: item.title,
       detail: item.workspaceTitle,
-      meta: item.workspaceId === props.activeWorkspaceId ? "Current worker" : "Switch",
+      meta: item.workspaceId === props.activeWorkspaceId
+        ? translate("session.command_palette_current_worker")
+        : translate("session.command_palette_switch"),
       action: () => {
         closeCommandPalette();
         openSessionFromList(item.workspaceId, item.sessionId);
@@ -2563,17 +2683,17 @@ export default function SessionView(props: SessionViewProps) {
     return COMMAND_PALETTE_THINKING_OPTIONS
       .filter((option) => {
         if (!query) return true;
-        return `${option.label} ${option.detail}`.toLowerCase().includes(query);
+        return `${translate(option.labelKey)} ${translate(option.detailKey)}`.toLowerCase().includes(query);
       })
       .map((option) => ({
         id: `thinking:${option.value}`,
-        title: option.label,
-        detail: option.detail,
-        meta: activeVariant === option.value ? "Current" : undefined,
+        title: translate(option.labelKey),
+        detail: translate(option.detailKey),
+        meta: activeVariant === option.value ? translate("session.command_palette_meta_current") : undefined,
         action: () => {
           props.setModelVariant(option.value);
           closeCommandPalette();
-          setToastMessage(`Thinking set to ${option.label}.`);
+          setToastMessage(translate("session.thinking_set").replace("{label}", translate(option.labelKey)));
         },
       }));
   });
@@ -2587,16 +2707,16 @@ export default function SessionView(props: SessionViewProps) {
 
   const commandPaletteTitle = createMemo(() => {
     const mode = commandPaletteMode();
-    if (mode === "sessions") return "Search sessions";
-    if (mode === "thinking") return "Change thinking";
-    return "Quick actions";
+    if (mode === "sessions") return translate("session.command_palette_search_sessions_title");
+    if (mode === "thinking") return translate("session.command_palette_change_thinking_title");
+    return translate("session.command_palette_quick_actions");
   });
 
   const commandPalettePlaceholder = createMemo(() => {
     const mode = commandPaletteMode();
-    if (mode === "sessions") return "Find by session title or worker";
-    if (mode === "thinking") return "Filter thinking options";
-    return "Search actions";
+    if (mode === "sessions") return translate("session.command_palette_find_session");
+    if (mode === "thinking") return translate("session.command_palette_filter_thinking");
+    return translate("session.command_palette_search_actions");
   });
 
   createEffect(
@@ -2744,9 +2864,32 @@ export default function SessionView(props: SessionViewProps) {
     });
   };
 
+  const toggleInboxPanel = () => {
+    setInboxPanelOpen((prev) => {
+      const next = !prev;
+      if (next) setArtifactsPanelOpen(false);
+      return next;
+    });
+  };
+
+  const toggleArtifactsPanel = () => {
+    setArtifactsPanelOpen((prev) => {
+      const next = !prev;
+      if (next) setInboxPanelOpen(false);
+      return next;
+    });
+  };
+
+  const closeRightPanel = () => {
+    setInboxPanelOpen(false);
+    setArtifactsPanelOpen(false);
+  };
+
+  const rightPanelOpen = createMemo(() => inboxPanelOpen() || artifactsPanelOpen());
+
   return (
-    <div class="flex h-screen w-full bg-dls-surface text-dls-text font-sans overflow-hidden">
-      <aside class="w-64 hidden md:flex flex-col bg-dls-sidebar border-r border-dls-border p-4">
+    <div class={WORKSPACE_ROOT_CLASS}>
+      <aside class="hidden">
         <div class="flex-1 overflow-y-auto">
           <Show when={showUpdatePill()}>
             <button
@@ -2860,7 +3003,7 @@ export default function SessionView(props: SessionViewProps) {
                             createTaskInWorkspace(workspace().id);
                           }}
                           disabled={props.newTaskDisabled}
-                          aria-label="New task"
+                          aria-label={translate("session.new_task")}
                         >
                           <Plus size={14} />
                         </button>
@@ -2873,7 +3016,7 @@ export default function SessionView(props: SessionViewProps) {
                               current === workspace().id ? null : workspace().id
                             );
                           }}
-                          aria-label="Worker options"
+                          aria-label={translate("session.worker_options")}
                         >
                           <MoreHorizontal size={14} />
                         </button>
@@ -2892,7 +3035,7 @@ export default function SessionView(props: SessionViewProps) {
                               setWorkspaceMenuId(null);
                             }}
                           >
-                            Edit name
+                            {translate("dashboard.edit_name")}
                           </button>
                           <button
                             type="button"
@@ -2902,7 +3045,7 @@ export default function SessionView(props: SessionViewProps) {
                               setWorkspaceMenuId(null);
                             }}
                           >
-                            Share...
+                            {translate("dashboard.share")}
                           </button>
                           <button
                             type="button"
@@ -2912,7 +3055,7 @@ export default function SessionView(props: SessionViewProps) {
                               setWorkspaceMenuId(null);
                             }}
                           >
-                            {soulEnabled() ? "Soul settings" : "Enable soul"}
+                            {soulEnabled() ? translate("dashboard.soul_settings") : translate("dashboard.enable_soul")}
                           </button>
                           <Show when={workspace().workspaceType === "remote"}>
                             <button
@@ -2924,7 +3067,7 @@ export default function SessionView(props: SessionViewProps) {
                               }}
                               disabled={isConnecting()}
                             >
-                              Test connection
+                              {translate("dashboard.test_connection")}
                             </button>
                             <button
                               type="button"
@@ -2935,7 +3078,7 @@ export default function SessionView(props: SessionViewProps) {
                               }}
                               disabled={isConnecting()}
                             >
-                              Edit connection
+                              {translate("dashboard.edit_connection")}
                             </button>
                           </Show>
                           <button
@@ -2946,7 +3089,7 @@ export default function SessionView(props: SessionViewProps) {
                               setWorkspaceMenuId(null);
                             }}
                           >
-                            Remove workspace
+                            {translate("dashboard.remove_worker")}
                           </button>
                         </div>
                       </Show>
@@ -3052,8 +3195,8 @@ export default function SessionView(props: SessionViewProps) {
                                   onClick={() => createTaskInWorkspace(workspace().id)}
                                   disabled={props.newTaskDisabled}
                                 >
-                                  <span class="group-hover/empty:hidden">No tasks yet.</span>
-                                  <span class="hidden group-hover/empty:inline font-medium">+ New task</span>
+                                  <span class="group-hover/empty:hidden">{translate("session.no_tasks_yet")}</span>
+                                  <span class="hidden group-hover/empty:inline font-medium">{translate("session.new_task_cta")}</span>
                                 </button>
                               </Show>
 
@@ -3070,7 +3213,7 @@ export default function SessionView(props: SessionViewProps) {
                           }
                         >
                           <div class="w-full px-3 py-2 text-xs text-dls-secondary ml-2 text-left rounded-lg">
-                            Loading tasks...
+                            {translate("session.loading_tasks")}
                           </div>
                         </Show>
                       </Show>
@@ -3088,7 +3231,7 @@ export default function SessionView(props: SessionViewProps) {
               onClick={() => setAddWorkspaceMenuOpen((prev) => !prev)}
             >
               <Plus size={14} />
-              Add a worker
+              {translate("session.add_worker")}
             </button>
             <Show when={addWorkspaceMenuOpen()}>
               <div class="absolute left-0 right-0 top-full mt-2 rounded-lg border border-dls-border bg-dls-surface shadow-xl overflow-hidden z-20">
@@ -3101,7 +3244,7 @@ export default function SessionView(props: SessionViewProps) {
                   }}
                 >
                   <Plus size={12} />
-                  New worker
+                  {translate("session.new_worker")}
                 </button>
                 <button
                   type="button"
@@ -3112,7 +3255,7 @@ export default function SessionView(props: SessionViewProps) {
                   }}
                 >
                   <Plus size={12} />
-                  Connect remote
+                  {translate("session.connect_remote")}
                 </button>
                 <button
                   type="button"
@@ -3124,7 +3267,7 @@ export default function SessionView(props: SessionViewProps) {
                   }}
                 >
                   <Plus size={12} />
-                  Import config
+                  {translate("session.import_config")}
                 </button>
               </div>
             </Show>
@@ -3133,8 +3276,140 @@ export default function SessionView(props: SessionViewProps) {
 
       </aside>
 
-      <main class="flex-1 flex flex-col overflow-hidden bg-dls-surface">
-        <header class="h-14 border-b border-dls-border flex items-center justify-between px-6 bg-dls-surface z-10 shrink-0">
+      <div class={drawerRailClass(rightDrawerOpen(), "left", WORKSPACE_LEFT_DRAWER_WIDTH_CLASS)}>
+        <aside class={`${WORKSPACE_DRAWER_SURFACE_CLASS} p-4`}>
+          <div class="h-full flex flex-col">
+            <div class="flex items-center justify-between gap-2 pb-2 border-b border-dls-border">
+              <div class="inline-flex min-w-0 max-w-[150px] items-center gap-2 rounded-lg border border-dls-border/70 bg-dls-surface/70 px-2 py-1">
+                <OpenWorkLogo size={16} />
+                <span class="truncate text-xs font-medium text-dls-text">{activeWorkspaceTitle()}</span>
+              </div>
+              <button
+                type="button"
+                class="h-8 w-8 rounded-md text-dls-secondary hover:text-dls-text hover:bg-dls-hover transition-colors"
+                onClick={closeRightDrawer}
+                aria-label={translate("common.close")}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div class="h-[calc(100%-40px)] overflow-y-auto space-y-3 pt-3">
+              <div class="space-y-1">
+                <button
+                  type="button"
+                  class={`w-full h-10 flex items-center gap-3 px-3 rounded-lg text-sm font-medium transition-colors ${
+                    showRightSidebarSelection() && props.tab === "scheduled"
+                      ? "bg-dls-active text-dls-text"
+                      : "text-dls-secondary hover:text-dls-text hover:bg-dls-hover"
+                  }`}
+                  onClick={() => {
+                    props.setTab("scheduled");
+                    props.setView("dashboard");
+                  }}
+                >
+                  <History size={18} />
+                  {translate("dashboard.automations")}
+                </button>
+                <button
+                  type="button"
+                  class={`w-full h-10 flex items-center gap-3 px-3 rounded-lg text-sm font-medium transition-colors ${
+                    showRightSidebarSelection() && props.tab === "soul"
+                      ? "bg-dls-active text-dls-text"
+                      : "text-dls-secondary hover:text-dls-text hover:bg-dls-hover"
+                  }`}
+                  onClick={() => {
+                    openSoul();
+                  }}
+                >
+                  <HeartPulse size={18} class={soulNavIconClass()} />
+                  {translate("dashboard.soul")}
+                </button>
+                <button
+                  type="button"
+                  class={`w-full h-10 flex items-center gap-3 px-3 rounded-lg text-sm font-medium transition-colors ${
+                    showRightSidebarSelection() && props.tab === "skills"
+                      ? "bg-dls-active text-dls-text"
+                      : "text-dls-secondary hover:text-dls-text hover:bg-dls-hover"
+                  }`}
+                  onClick={() => {
+                    props.setTab("skills");
+                    props.setView("dashboard");
+                  }}
+                >
+                  <Zap size={18} />
+                  {translate("dashboard.skills")}
+                </button>
+                <button
+                  type="button"
+                  class={`w-full h-10 flex items-center gap-3 px-3 rounded-lg text-sm font-medium transition-colors ${
+                    showRightSidebarSelection() && (props.tab === "mcp" || props.tab === "plugins")
+                      ? "bg-dls-active text-dls-text"
+                      : "text-dls-secondary hover:text-dls-text hover:bg-dls-hover"
+                  }`}
+                  onClick={() => {
+                    props.setTab("mcp");
+                    props.setView("dashboard");
+                  }}
+                >
+                  <Box size={18} />
+                  {translate("dashboard.extensions")}
+                </button>
+                <button
+                  type="button"
+                  class={`w-full h-10 flex items-center gap-3 px-3 rounded-lg text-sm font-medium transition-colors ${
+                    showRightSidebarSelection() && props.tab === "identities"
+                      ? "bg-dls-active text-dls-text"
+                      : "text-dls-secondary hover:text-dls-text hover:bg-dls-hover"
+                  }`}
+                  onClick={() => {
+                    props.setTab("identities");
+                    props.setView("dashboard");
+                  }}
+                >
+                  <MessageCircle size={18} />
+                  {translate("dashboard.messaging")}
+                </button>
+                <Show when={props.developerMode}>
+                  <button
+                    type="button"
+                    class={`w-full h-10 flex items-center gap-3 px-3 rounded-lg text-sm font-medium transition-colors ${
+                      showRightSidebarSelection() && props.tab === "config"
+                        ? "bg-dls-active text-dls-text"
+                        : "text-dls-secondary hover:text-dls-text hover:bg-dls-hover"
+                    }`}
+                    onClick={() => {
+                      openConfig();
+                    }}
+                  >
+                    <SlidersHorizontal size={18} />
+                    {translate("settings.advanced_title")}
+                  </button>
+                </Show>
+              </div>
+            </div>
+            <div class="mt-2 border-t border-dls-border pt-2">
+              <StatusBar
+                clientConnected={props.clientConnected}
+                openworkServerStatus={props.openworkServerStatus}
+                developerMode={props.developerMode}
+                onOpenSettings={() => openSettings("general")}
+                onOpenMessaging={openConfig}
+                onOpenProviders={openProviderAuth}
+                onOpenMcp={openMcp}
+                providerConnectedIds={props.providerConnectedIds}
+                mcpStatuses={props.mcpStatuses}
+                presentation="plain"
+                showTips={false}
+                showSettingsButton={true}
+                compact={true}
+              />
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <main class={WORKSPACE_MAIN_CLASS}>
+        <header class={WORKSPACE_TOPBAR_CLASS}>
           <div class="flex items-center gap-3 min-w-0">
             <Show when={showUpdatePill()}>
               <button
@@ -3164,7 +3439,148 @@ export default function SessionView(props: SessionViewProps) {
               </button>
             </Show>
 
-            <h1 class="text-sm font-semibold text-dls-text truncate">{selectedSessionTitle() || "New task"}</h1>
+            <button
+              type="button"
+              class="h-9 w-9 flex items-center justify-center rounded-lg text-dls-secondary hover:text-dls-text hover:bg-dls-hover transition-colors"
+              onClick={toggleRightDrawer}
+              title={translate("session.open_side_panel")}
+              aria-label={translate("session.open_side_panel")}
+            >
+              <SlidersHorizontal size={16} />
+            </button>
+
+            <div class="relative min-w-[160px] max-w-[300px]" ref={(el) => (workspaceSwitcherRef = el)}>
+              <button
+                type="button"
+                class="h-9 w-full rounded-lg border border-dls-border bg-dls-hover px-3 text-left text-sm text-dls-text hover:bg-dls-active transition-colors flex items-center gap-2"
+                onClick={() => {
+                  setSessionSwitcherOpen(false);
+                  setWorkspaceSwitcherOpen((prev) => !prev);
+                }}
+                aria-label={translate("session.workspace_selector")}
+              >
+                <span class="truncate flex-1">{activeWorkspaceTitle()}</span>
+                <ChevronDown size={14} class={`text-dls-secondary transition-transform ${workspaceSwitcherOpen() ? "rotate-180" : ""}`} />
+              </button>
+              <Show when={workspaceSwitcherOpen()}>
+                <div class="absolute left-0 top-[calc(100%+6px)] z-30 w-[320px] rounded-xl border border-dls-border bg-dls-surface shadow-xl overflow-hidden">
+                  <div class="max-h-72 overflow-y-auto p-1">
+                    <For each={props.workspaceSessionGroups}>
+                      {(group) => {
+                        const active = () => group.workspace.id === props.activeWorkspaceId;
+                        return (
+                          <button
+                            type="button"
+                            class={`w-full text-left rounded-lg px-3 py-2.5 transition-colors ${
+                              active() ? "bg-dls-active text-dls-text" : "text-dls-text hover:bg-dls-hover"
+                            }`}
+                            onClick={() => {
+                              setWorkspaceSwitcherOpen(false);
+                              void Promise.resolve(props.activateWorkspace(group.workspace.id));
+                            }}
+                          >
+                            <div class="text-sm font-medium truncate">{workspaceLabel(group.workspace)}</div>
+                            <div class="mt-0.5 text-[11px] text-dls-secondary flex items-center justify-between gap-2">
+                              <span class="truncate">{workspaceKindLabel(group.workspace)}</span>
+                              <span class="font-mono">{group.sessions.length}</span>
+                            </div>
+                          </button>
+                        );
+                      }}
+                    </For>
+                    <Show when={props.workspaceSessionGroups.length === 0}>
+                      <div class="px-3 py-2 text-xs text-dls-secondary">{translate("dashboard.no_workspaces")}</div>
+                    </Show>
+                  </div>
+                  <div class="border-t border-dls-border p-1">
+                    <button
+                      type="button"
+                      class="w-full text-left rounded-lg px-3 py-2 text-xs text-dls-secondary hover:text-dls-text hover:bg-dls-hover transition-colors"
+                      onClick={() => {
+                        props.openCreateWorkspace();
+                        setWorkspaceSwitcherOpen(false);
+                      }}
+                    >
+                      {translate("session.new_worker")}
+                    </button>
+                    <button
+                      type="button"
+                      class="w-full text-left rounded-lg px-3 py-2 text-xs text-dls-secondary hover:text-dls-text hover:bg-dls-hover transition-colors"
+                      onClick={() => {
+                        props.openCreateRemoteWorkspace();
+                        setWorkspaceSwitcherOpen(false);
+                      }}
+                    >
+                      {translate("session.connect_remote")}
+                    </button>
+                  </div>
+                </div>
+              </Show>
+            </div>
+
+            <div class="relative min-w-[180px] max-w-[360px]" ref={(el) => (sessionSwitcherRef = el)}>
+              <button
+                type="button"
+                class="h-9 w-full rounded-lg border border-dls-border bg-dls-hover px-3 text-left text-sm text-dls-text hover:bg-dls-active transition-colors flex items-center gap-2 disabled:opacity-60"
+                disabled={!activeWorkspaceGroup()}
+                onClick={() => {
+                  setWorkspaceSwitcherOpen(false);
+                  setSessionSwitcherOpen((prev) => !prev);
+                }}
+                aria-label={translate("session.session_selector")}
+              >
+                <span class="truncate flex-1">{selectedSessionTitle() || translate("session.new_task")}</span>
+                <ChevronDown size={14} class={`text-dls-secondary transition-transform ${sessionSwitcherOpen() ? "rotate-180" : ""}`} />
+              </button>
+              <Show when={sessionSwitcherOpen()}>
+                <div class="absolute left-0 top-[calc(100%+6px)] z-30 w-[360px] rounded-xl border border-dls-border bg-dls-surface shadow-xl overflow-hidden">
+                  <div class="max-h-72 overflow-y-auto p-1">
+                    <For each={activeWorkspaceGroup()?.sessions ?? []}>
+                      {(session) => {
+                        const active = () => session.id === props.selectedSessionId;
+                        return (
+                          <button
+                            type="button"
+                            class={`w-full text-left rounded-lg px-3 py-2.5 transition-colors ${
+                              active() ? "bg-dls-active text-dls-text" : "text-dls-text hover:bg-dls-hover"
+                            }`}
+                            onClick={() => {
+                              setSessionSwitcherOpen(false);
+                              openSessionFromList(props.activeWorkspaceId, session.id);
+                            }}
+                          >
+                            <div class="truncate text-sm font-medium">{session.title || translate("common.untitled")}</div>
+                            <Show when={session.time?.updated}>
+                              <div class="mt-0.5 text-[11px] text-dls-secondary">
+                                {formatRelativeTime(session.time?.updated ?? Date.now())}
+                              </div>
+                            </Show>
+                          </button>
+                        );
+                      }}
+                    </For>
+                    <Show when={(activeWorkspaceGroup()?.sessions.length ?? 0) === 0}>
+                      <div class="px-3 py-2 text-xs text-dls-secondary">{translate("session.no_tasks_yet")}</div>
+                    </Show>
+                  </div>
+                  <div class="border-t border-dls-border p-1">
+                    <button
+                      type="button"
+                      class="w-full text-left rounded-lg px-3 py-2 text-xs text-dls-secondary hover:text-dls-text hover:bg-dls-hover transition-colors"
+                      onClick={() => {
+                        setSessionSwitcherOpen(false);
+                        createTaskInWorkspace(props.activeWorkspaceId);
+                      }}
+                      disabled={props.newTaskDisabled}
+                    >
+                      {translate("session.new_task_cta")}
+                    </button>
+                  </div>
+                </div>
+              </Show>
+            </div>
+
+            <h1 class="hidden xl:block text-sm font-semibold text-dls-text truncate">{selectedSessionTitle() || translate("session.new_task")}</h1>
             <Show when={props.developerMode}>
               <span class="text-xs text-dls-secondary">{props.headerStatus}</span>
             </Show>
@@ -3173,7 +3589,7 @@ export default function SessionView(props: SessionViewProps) {
             </Show>
           </div>
 
-          <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2">
             <button
               type="button"
               class={`h-9 px-2.5 flex items-center justify-center rounded-lg text-[11px] font-mono transition-colors ${
@@ -3190,8 +3606,8 @@ export default function SessionView(props: SessionViewProps) {
                 }
                 window.setTimeout(() => openCommandPalette(), 0);
               }}
-              title="Quick actions (Ctrl/Cmd+K)"
-              aria-label="Quick actions"
+              title={translate("session.quick_actions_shortcut")}
+              aria-label={translate("session.command_palette_quick_actions")}
             >
               Cmd+K
             </button>
@@ -3209,8 +3625,8 @@ export default function SessionView(props: SessionViewProps) {
                 }
                 openSearch();
               }}
-              title="Search conversation (Ctrl/Cmd+F)"
-              aria-label="Search conversation"
+              title={translate("session.search_conversation_shortcut")}
+              aria-label={translate("session.search_conversation")}
             >
               <Search size={16} />
             </button>
@@ -3219,8 +3635,8 @@ export default function SessionView(props: SessionViewProps) {
               class="h-9 w-9 flex items-center justify-center rounded-lg text-dls-secondary hover:text-dls-text hover:bg-dls-hover transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               onClick={undoLastMessage}
               disabled={!canUndoLastMessage() || historyActionBusy() !== null}
-              title="Undo last message"
-              aria-label="Undo last message"
+              title={translate("session.undo_last_message")}
+              aria-label={translate("session.undo_last_message")}
             >
               <Show when={historyActionBusy() === "undo"} fallback={<Undo2 size={16} />}>
                 <Loader2 size={16} class="animate-spin" />
@@ -3231,8 +3647,8 @@ export default function SessionView(props: SessionViewProps) {
               class="h-9 w-9 flex items-center justify-center rounded-lg text-dls-secondary hover:text-dls-text hover:bg-dls-hover transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               onClick={redoLastMessage}
               disabled={!canRedoLastMessage() || historyActionBusy() !== null}
-              title="Redo last reverted message"
-              aria-label="Redo last reverted message"
+              title={translate("session.redo_last_message")}
+              aria-label={translate("session.redo_last_message")}
             >
               <Show when={historyActionBusy() === "redo"} fallback={<Redo2 size={16} />}>
                 <Loader2 size={16} class="animate-spin" />
@@ -3243,8 +3659,8 @@ export default function SessionView(props: SessionViewProps) {
               class="h-9 w-9 flex items-center justify-center rounded-lg text-dls-secondary hover:text-dls-text hover:bg-dls-hover transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               onClick={compactSessionHistory}
               disabled={!canCompactSession() || historyActionBusy() !== null}
-              title="Compact session context"
-              aria-label="Compact session context"
+              title={translate("session.compact_context")}
+              aria-label={translate("session.compact_context")}
             >
               <Show when={historyActionBusy() === "compact"} fallback={<Maximize2 size={16} />}>
                 <Loader2 size={16} class="animate-spin" />
@@ -3255,8 +3671,8 @@ export default function SessionView(props: SessionViewProps) {
                 type="button"
                 class="h-9 w-9 flex items-center justify-center rounded-lg text-dls-secondary hover:text-dls-text hover:bg-dls-hover transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 disabled={!props.selectedSessionId}
-                title={props.selectedSessionId ? "Session actions" : "Select a session to manage it"}
-                aria-label={props.selectedSessionId ? "Session actions" : "Select a session to manage it"}
+                title={props.selectedSessionId ? translate("session.session_actions") : translate("session.select_session_to_manage")}
+                aria-label={props.selectedSessionId ? translate("session.session_actions") : translate("session.select_session_to_manage")}
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
@@ -3280,30 +3696,57 @@ export default function SessionView(props: SessionViewProps) {
                     }}
                     disabled={!canCompactSession() || historyActionBusy() !== null}
                   >
-                    Compact session context
+                    {translate("session.compact_context")}
                   </button>
                   <button
                     type="button"
                     class="w-full text-left px-2 py-1.5 text-sm rounded-md hover:bg-dls-hover"
                     onClick={openRenameModal}
                   >
-                    Rename session
+                    {translate("session.rename_session")}
                   </button>
                   <button
                     type="button"
                     class="w-full text-left px-2 py-1.5 text-sm rounded-md hover:bg-dls-hover text-red-11"
                     onClick={openDeleteSessionModal}
                   >
-                    Delete session
+                    {translate("session.delete_session")}
                   </button>
                 </div>
               </Show>
             </div>
+            <button
+              type="button"
+              class={`h-9 w-9 flex items-center justify-center rounded-lg transition-colors ${
+                inboxPanelOpen()
+                  ? "bg-dls-active text-dls-text"
+                  : "text-dls-secondary hover:text-dls-text hover:bg-dls-hover"
+              }`}
+              onClick={toggleInboxPanel}
+              title={`${inboxPanelOpen() ? translate("common.hide") : translate("common.show")} ${translate("inbox_panel.title")}`}
+              aria-label={`${inboxPanelOpen() ? translate("common.hide") : translate("common.show")} ${translate("inbox_panel.title")}`}
+            >
+              <Inbox size={16} />
+            </button>
+            <button
+              type="button"
+              class={`h-9 w-9 flex items-center justify-center rounded-lg transition-colors ${
+                artifactsPanelOpen()
+                  ? "bg-dls-active text-dls-text"
+                  : "text-dls-secondary hover:text-dls-text hover:bg-dls-hover"
+              }`}
+              onClick={toggleArtifactsPanel}
+              title={`${artifactsPanelOpen() ? translate("common.hide") : translate("common.show")} ${translate("session.artifacts")}`}
+              aria-label={`${artifactsPanelOpen() ? translate("common.hide") : translate("common.show")} ${translate("session.artifacts")}`}
+            >
+              <Paperclip size={16} />
+            </button>
           </div>
         </header>
 
+        <section class={WORKSPACE_CENTER_SURFACE_CLASS}>
         <Show when={searchOpen()}>
-          <div class="border-b border-dls-border bg-dls-hover/40 px-6 py-2">
+          <div class="border-b border-dls-border/80 bg-dls-hover/30 px-5 py-2">
             <div class="mx-auto flex w-full max-w-5xl items-center gap-2 rounded-xl border border-dls-border bg-dls-surface px-3 py-2">
               <Search size={14} class="text-dls-secondary" />
               <input
@@ -3326,8 +3769,8 @@ export default function SessionView(props: SessionViewProps) {
                   }
                 }}
                 class="min-w-0 flex-1 bg-transparent text-sm text-dls-text placeholder:text-dls-secondary focus:outline-none"
-                placeholder="Search in this chat"
-                aria-label="Search in this chat"
+                placeholder={translate("session.search_in_chat")}
+                aria-label={translate("session.search_in_chat")}
               />
               <span class="text-[11px] text-dls-secondary tabular-nums">{activeSearchPositionLabel()}</span>
               <button
@@ -3335,24 +3778,24 @@ export default function SessionView(props: SessionViewProps) {
                 class="rounded-md border border-dls-border px-2 py-1 text-[11px] text-dls-secondary hover:text-dls-text hover:bg-dls-hover transition-colors disabled:opacity-60"
                 disabled={searchHits().length === 0}
                 onClick={() => moveSearchHit(-1)}
-                aria-label="Previous match"
+                aria-label={translate("session.previous_match")}
               >
-                Prev
+                {translate("session.prev")}
               </button>
               <button
                 type="button"
                 class="rounded-md border border-dls-border px-2 py-1 text-[11px] text-dls-secondary hover:text-dls-text hover:bg-dls-hover transition-colors disabled:opacity-60"
                 disabled={searchHits().length === 0}
                 onClick={() => moveSearchHit(1)}
-                aria-label="Next match"
+                aria-label={translate("session.next_match")}
               >
-                Next
+                {translate("session.next")}
               </button>
               <button
                 type="button"
                 class="h-7 w-7 flex items-center justify-center rounded-md text-dls-secondary hover:text-dls-text hover:bg-dls-hover transition-colors"
                 onClick={closeSearch}
-                aria-label="Close search"
+                aria-label={translate("session.close_search")}
               >
                 <X size={14} />
               </button>
@@ -3363,7 +3806,7 @@ export default function SessionView(props: SessionViewProps) {
        <div class="flex-1 flex overflow-hidden">
          <div class="flex-1 min-w-0 relative overflow-hidden">
            <div
-             class="h-full overflow-y-auto px-12 py-10 scroll-smooth bg-dls-surface"
+             class="h-full overflow-y-auto px-10 py-8 scroll-smooth bg-gradient-to-b from-dls-surface to-dls-hover/25"
              style={{ contain: "layout paint style" }}
              ref={(el) => (chatContainerEl = el)}
            >
@@ -3374,9 +3817,9 @@ export default function SessionView(props: SessionViewProps) {
                  <Zap class="text-dls-secondary" />
                </div>
               <div class="space-y-2">
-                <h3 class="text-xl font-medium">What do you want to do?</h3>
+                <h3 class="text-xl font-medium">{translate("session.empty_title")}</h3>
                 <p class="text-dls-secondary text-sm max-w-sm mx-auto">
-                  Pick a starting point or just type below.
+                  {translate("session.empty_hint")}
                 </p>
               </div>
               <div class="grid gap-3 sm:grid-cols-2 max-w-2xl mx-auto text-left">
@@ -3387,9 +3830,9 @@ export default function SessionView(props: SessionViewProps) {
                     void handleBrowserAutomationQuickstart();
                   }}
                 >
-                  <div class="text-sm font-semibold text-dls-text">Automate your browser</div>
+                  <div class="text-sm font-semibold text-dls-text">{translate("session.quickstart_browser_title")}</div>
                   <div class="mt-1 text-xs text-dls-secondary leading-relaxed">
-                    Set up browser actions and run reliable web tasks from OpenWork.
+                    {translate("session.quickstart_browser_hint")}
                   </div>
                 </button>
                 <button
@@ -3399,11 +3842,9 @@ export default function SessionView(props: SessionViewProps) {
                     void handleSoulQuickstart();
                   }}
                 >
-                  <div class="text-sm font-semibold text-dls-text">Give me a soul</div>
+                  <div class="text-sm font-semibold text-dls-text">{translate("session.quickstart_soul_title")}</div>
                   <div class="mt-1 text-xs text-dls-secondary leading-relaxed">
-                    Keep your goals and preferences across sessions with light scheduled check-ins.
-                    Tradeoff: more autonomy can create extra background runs, but revert is one command.
-                    Audit setup and heartbeat evidence from the Soul section.
+                    {translate("session.quickstart_soul_hint")}
                   </div>
                 </button>
               </div>
@@ -3417,8 +3858,9 @@ export default function SessionView(props: SessionViewProps) {
                 class="rounded-full border border-dls-border bg-dls-hover/70 px-3 py-1 text-xs text-dls-secondary transition-colors hover:bg-dls-active hover:text-dls-text"
                 onClick={revealEarlierMessages}
               >
-                Show {nextRevealCount().toLocaleString()} earlier message
-                {nextRevealCount() === 1 ? "" : "s"}
+                {translate("session.show_earlier_messages")
+                  .replace("{count}", nextRevealCount().toLocaleString())
+                  .replace("{suffix}", nextRevealCount() === 1 ? "" : "s")}
               </button>
             </div>
           </Show>
@@ -3477,7 +3919,7 @@ export default function SessionView(props: SessionViewProps) {
                     class="rounded-full px-3 py-1.5 text-xs text-gray-11 hover:bg-gray-2 transition-colors"
                     onClick={() => jumpToLatest("smooth")}
                   >
-                    Jump to latest
+                    {translate("session.jump_to_latest")}
                   </button>
                 </div>
               </div>
@@ -3603,126 +4045,51 @@ export default function SessionView(props: SessionViewProps) {
         attachmentsEnabled={attachmentsEnabled()}
         attachmentsDisabledReason={attachmentsDisabledReason()}
       />
+      </section>
 
-        <StatusBar
-          clientConnected={props.clientConnected}
-          openworkServerStatus={props.openworkServerStatus}
-          developerMode={props.developerMode}
-          onOpenSettings={() => openSettings("general")}
-          onOpenMessaging={openConfig}
-          onOpenProviders={openProviderAuth}
-          onOpenMcp={openMcp}
-          providerConnectedIds={props.providerConnectedIds}
-          mcpStatuses={props.mcpStatuses}
-        />
       </main>
 
-      <aside class="w-56 hidden md:flex flex-col bg-dls-sidebar border-l border-dls-border p-4">
-        <div class="flex-1 overflow-y-auto space-y-3 pt-2">
-          <div class="space-y-1">
-          <button
-            type="button"
-            class={`w-full h-10 flex items-center gap-3 px-3 rounded-lg text-sm font-medium transition-colors ${
-              showRightSidebarSelection() && props.tab === "scheduled"
-                ? "bg-dls-active text-dls-text"
-                : "text-dls-secondary hover:text-dls-text hover:bg-dls-hover"
-            }`}
-            onClick={() => {
-              props.setTab("scheduled");
-              props.setView("dashboard");
-            }}
-          >
-            <History size={18} />
-            Automations
-          </button>
-          <button
-            type="button"
-            class={`w-full h-10 flex items-center gap-3 px-3 rounded-lg text-sm font-medium transition-colors ${
-              showRightSidebarSelection() && props.tab === "soul"
-                ? "bg-dls-active text-dls-text"
-                : "text-dls-secondary hover:text-dls-text hover:bg-dls-hover"
-            }`}
-            onClick={() => openSoul()}
-          >
-            <HeartPulse size={18} class={soulNavIconClass()} />
-            Soul
-          </button>
-          <button
-            type="button"
-            class={`w-full h-10 flex items-center gap-3 px-3 rounded-lg text-sm font-medium transition-colors ${
-              showRightSidebarSelection() && props.tab === "skills"
-                ? "bg-dls-active text-dls-text"
-                : "text-dls-secondary hover:text-dls-text hover:bg-dls-hover"
-            }`}
-            onClick={() => {
-              props.setTab("skills");
-              props.setView("dashboard");
-            }}
-          >
-            <Zap size={18} />
-            Skills
-          </button>
-          <button
-            type="button"
-            class={`w-full h-10 flex items-center gap-3 px-3 rounded-lg text-sm font-medium transition-colors ${
-              showRightSidebarSelection() && (props.tab === "mcp" || props.tab === "plugins")
-                ? "bg-dls-active text-dls-text"
-                : "text-dls-secondary hover:text-dls-text hover:bg-dls-hover"
-            }`}
-            onClick={() => {
-              props.setTab("mcp");
-              props.setView("dashboard");
-            }}
-          >
-            <Box size={18} />
-            Extensions
-          </button>
-          <button
-            type="button"
-            class={`w-full h-10 flex items-center gap-3 px-3 rounded-lg text-sm font-medium transition-colors ${
-              showRightSidebarSelection() && props.tab === "identities"
-                ? "bg-dls-active text-dls-text"
-                : "text-dls-secondary hover:text-dls-text hover:bg-dls-hover"
-            }`}
-            onClick={() => {
-              props.setTab("identities");
-              props.setView("dashboard");
-            }}
-          >
-            <MessageCircle size={18} />
-            Messaging
-          </button>
-          <Show when={props.developerMode}>
-            <button
-              type="button"
-              class={`w-full h-10 flex items-center gap-3 px-3 rounded-lg text-sm font-medium transition-colors ${
-                showRightSidebarSelection() && props.tab === "config"
-                  ? "bg-dls-active text-dls-text"
-                  : "text-dls-secondary hover:text-dls-text hover:bg-dls-hover"
-              }`}
-              onClick={openConfig}
-            >
-              <SlidersHorizontal size={18} />
-              Advanced
-            </button>
-          </Show>
+      <div class={drawerRailClass(rightPanelOpen(), "right", WORKSPACE_RIGHT_DRAWER_WIDTH_CLASS)}>
+        <aside class={WORKSPACE_PANEL_SURFACE_CLASS}>
+          <div class="h-full flex flex-col">
+            <div class="h-12 px-4 border-b border-dls-border flex items-center justify-between">
+              <div class="text-sm font-semibold">
+                {inboxPanelOpen() ? translate("inbox_panel.title") : translate("session.artifacts")}
+              </div>
+              <button
+                type="button"
+                class="h-8 w-8 rounded-md text-dls-secondary hover:text-dls-text hover:bg-dls-hover transition-colors"
+                onClick={closeRightPanel}
+                aria-label={translate("common.close")}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div class="flex-1 overflow-y-auto p-3">
+              <Show
+                when={inboxPanelOpen()}
+                fallback={
+                  <ArtifactsPanel
+                    id="sidebar-artifacts-panel"
+                    items={sidebarFiles()}
+                    workspaceRoot={props.activeWorkspaceRoot}
+                    onOpenMarkdown={openMarkdownEditor}
+                    maxPreview={24}
+                  />
+                }
+              >
+                <InboxPanel
+                  id="sidebar-inbox-panel"
+                  client={props.openworkServerClient}
+                  workspaceId={props.openworkServerWorkspaceId}
+                  onToast={(message) => setToastMessage(message)}
+                  maxPreview={20}
+                />
+              </Show>
+            </div>
           </div>
-
-          <InboxPanel
-            id="sidebar-inbox"
-            client={props.openworkServerClient}
-            workspaceId={props.openworkServerWorkspaceId}
-            onToast={(message) => setToastMessage(message)}
-          />
-
-          <ArtifactsPanel
-            id="sidebar-artifacts"
-            files={touchedFiles()}
-            workspaceRoot={props.activeWorkspaceRoot}
-            onOpenMarkdown={openMarkdownEditor}
-          />
-        </div>
-      </aside>
+        </aside>
+      </div>
 
       <Show when={commandPaletteOpen()}>
         <div
@@ -3811,8 +4178,8 @@ export default function SessionView(props: SessionViewProps) {
             </div>
 
             <div class="border-t border-dls-border px-3 py-2 text-[11px] text-dls-secondary flex items-center justify-between gap-2">
-              <span>Arrow keys to navigate</span>
-              <span>Enter to run · Esc to close</span>
+              <span>{translate("session.command_palette_nav_hint")}</span>
+              <span>{translate("session.command_palette_enter_hint")}</span>
             </div>
           </div>
         </div>
@@ -3844,14 +4211,14 @@ export default function SessionView(props: SessionViewProps) {
 
       <ConfirmModal
         open={deleteSessionOpen()}
-        title="Delete session?"
+        title={translate("session.delete_session_confirm_title")}
         message={
           selectedSessionTitle().trim()
-            ? `This will permanently delete \"${selectedSessionTitle().trim()}\" and its messages.`
-            : "This will permanently delete the selected session and its messages."
+            ? translate("session.delete_session_confirm_with_name").replace("{name}", selectedSessionTitle().trim())
+            : translate("session.delete_session_confirm_without_name")
         }
-        confirmLabel={deleteSessionBusy() ? "Deleting..." : "Delete"}
-        cancelLabel="Cancel"
+        confirmLabel={deleteSessionBusy() ? translate("session.deleting") : translate("common.delete")}
+        cancelLabel={translate("common.cancel")}
         variant="danger"
         onConfirm={confirmDeleteSession}
         onCancel={closeDeleteSessionModal}
@@ -3897,16 +4264,16 @@ export default function SessionView(props: SessionViewProps) {
                   <Shield size={24} />
                 </div>
                 <div>
-                  <h3 class="text-lg font-semibold text-gray-12">Permission Required</h3>
-                  <p class="text-sm text-gray-11 mt-1">OpenCode is requesting permission to continue.</p>
+                  <h3 class="text-lg font-semibold text-gray-12">{translate("session.permission_required_title")}</h3>
+                  <p class="text-sm text-gray-11 mt-1">{translate("session.permission_required_description")}</p>
                 </div>
               </div>
 
               <div class="bg-gray-1/50 rounded-xl p-4 border border-gray-6 mb-6">
-                <div class="text-xs text-gray-10 uppercase tracking-wider mb-2 font-semibold">Permission</div>
+                <div class="text-xs text-gray-10 uppercase tracking-wider mb-2 font-semibold">{translate("session.permission_required")}</div>
                 <div class="text-sm text-gray-12 font-mono">{props.activePermission?.permission}</div>
 
-                <div class="text-xs text-gray-10 uppercase tracking-wider mt-4 mb-2 font-semibold">Scope</div>
+                <div class="text-xs text-gray-10 uppercase tracking-wider mt-4 mb-2 font-semibold">{translate("session.permission_scope")}</div>
                 <div class="flex items-center gap-2 text-sm font-mono text-amber-12 bg-amber-1/30 px-2 py-1 rounded border border-amber-7/20">
                   <HardDrive size={12} />
                   {props.activePermission?.patterns.join(", ")}
@@ -3914,7 +4281,7 @@ export default function SessionView(props: SessionViewProps) {
 
                 <Show when={Object.keys(props.activePermission?.metadata ?? {}).length > 0}>
                   <details class="mt-4 rounded-lg bg-gray-1/20 p-2">
-                    <summary class="cursor-pointer text-xs text-gray-11">Details</summary>
+                    <summary class="cursor-pointer text-xs text-gray-11">{translate("commands.details_required")}</summary>
                     <pre class="mt-2 whitespace-pre-wrap break-words text-xs text-gray-12">
                       {props.safeStringify(props.activePermission?.metadata)}
                     </pre>
@@ -3932,7 +4299,7 @@ export default function SessionView(props: SessionViewProps) {
                   disabled={props.permissionReplyBusy}
                 >
 
-                  Deny
+                  {translate("session.permission_deny")}
                 </Button>
                 <div class="grid grid-cols-2 gap-2">
                   <Button
@@ -3941,7 +4308,7 @@ export default function SessionView(props: SessionViewProps) {
                     onClick={() => props.activePermission && props.respondPermission(props.activePermission.id, "once")}
                     disabled={props.permissionReplyBusy}
                   >
-                    Once
+                    {translate("session.permission_once")}
                   </Button>
                   <Button
                     variant="primary"
@@ -3952,7 +4319,7 @@ export default function SessionView(props: SessionViewProps) {
                     }
                     disabled={props.permissionReplyBusy}
                   >
-                    Allow for session
+                    {translate("session.permission_allow_session")}
                   </Button>
                 </div>
               </div>

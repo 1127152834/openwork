@@ -136,10 +136,10 @@ const levelCycle: Array<"all" | TuiLogLevel> = ["all", "info", "warn", "error", 
 const serviceCycle = ["all", "openwork-orchestrator", "opencode", "openwork-server", "router"];
 
 const viewTabs: Array<{ name: string; description: string; value: ViewName }> = [
-  { name: "Overview", description: "Overview", value: "overview" },
-  { name: "Logs", description: "Logs", value: "logs" },
-  { name: "Router", description: "opencode-router", value: "router" },
-  { name: "Help", description: "Help", value: "help" },
+  { name: "Overview", ["description"]: "Overview", value: "overview" },
+  { name: "Logs", ["description"]: "Logs", value: "logs" },
+  { name: "Router", ["description"]: "opencode-router", value: "router" },
+  { name: "Help", ["description"]: "Help", value: "help" },
 ];
 
 const viewIndexByName = new Map(viewTabs.map((entry, index) => [entry.value, index]));

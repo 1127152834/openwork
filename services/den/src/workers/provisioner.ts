@@ -190,11 +190,12 @@ async function attachRenderCustomDomain(serviceId: string, workerId: string, ren
 }
 
 function assertRenderConfig() {
+  const requiredForRender = (name: string) => `${name} is required for render provisioner`
   if (!env.render.apiKey) {
-    throw new Error("RENDER_API_KEY is required for render provisioner")
+    throw new Error(requiredForRender("RENDER_API_KEY"))
   }
   if (!env.render.ownerId) {
-    throw new Error("RENDER_OWNER_ID is required for render provisioner")
+    throw new Error(requiredForRender("RENDER_OWNER_ID"))
   }
 }
 

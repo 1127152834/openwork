@@ -1,13 +1,18 @@
 import Link from "next/link";
+import { pickByLocale, type LandingLocale } from "../lib/i18n";
 
 type Props = {
   stars: string;
+  locale?: LandingLocale;
   callUrl?: string;
   active?: "home" | "download" | "enterprise" | "den";
 };
 
 export function SiteNav(props: Props) {
+  const locale = props.locale ?? "en";
+  const txt = (en: string, zh: string) => pickByLocale(locale, en, zh);
   const call = "/enterprise#book";
+  const docsHref = locale === "zh" ? "/openwork?lang=zh" : "/openwork?lang=en";
   const navLink = (isActive: boolean) =>
     isActive ? "transition text-black" : "transition hover:text-black";
   return (
@@ -24,22 +29,22 @@ export function SiteNav(props: Props) {
           </Link>
           <div className="hidden items-center gap-6 text-[15px] text-gray-700 md:flex">
             <Link href="/#install" className="transition hover:text-black">
-              Getting started
+              {txt("Getting started", "快速开始")}
             </Link>
             <Link href="/#capabilities" className="transition hover:text-black">
-              Features
+              {txt("Features", "功能")}
             </Link>
             <Link href="/#faq" className="transition hover:text-black">
               FAQ
             </Link>
-            <Link href="/docs" className="transition hover:text-black">
+            <Link href={docsHref} className="transition hover:text-black">
               Docs
             </Link>
             <Link href="/download" className={navLink(props.active === "download")}>
-              Download
+              {txt("Download", "下载")}
             </Link>
             <Link href="/enterprise" className={navLink(props.active === "enterprise")}>
-              Enterprise
+              {txt("Enterprise", "企业版")}
             </Link>
             <Link href="/den" className={navLink(props.active === "den")}>
               Den
@@ -51,7 +56,7 @@ export function SiteNav(props: Props) {
             href={call}
             className="hidden rounded-md bg-black px-3 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 sm:inline-flex"
           >
-            Book a call
+            {txt("Book a call", "预约沟通")}
           </a>
           <a
             href="https://github.com/different-ai/openwork"

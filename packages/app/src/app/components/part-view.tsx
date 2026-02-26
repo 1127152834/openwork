@@ -5,6 +5,7 @@ import { File } from "lucide-solid";
 import { isTauriRuntime, safeStringify, summarizeStep } from "../utils";
 import { usePlatform } from "../context/platform";
 import { perfNow, recordPerfLog } from "../lib/perf-log";
+import { currentLocale, t } from "../../i18n";
 
 type Props = {
   part: Part;
@@ -407,6 +408,8 @@ function createCustomRenderer(tone: "light" | "dark") {
 }
 
 export default function PartView(props: Props) {
+  const translate = (key: string) => t(key, currentLocale());
+
   const platform = usePlatform();
   const p = () => props.part;
   const developerMode = () => props.developerMode ?? false;
@@ -835,7 +838,7 @@ export default function PartView(props: Props) {
           }
         >
           <details class={`rounded-lg ${panelBgClass()} p-2`.trim()}>
-            <summary class={`cursor-pointer text-xs ${subtleTextClass()}`.trim()}>Thinking</summary>
+            <summary class={`cursor-pointer text-xs ${subtleTextClass()}`.trim()}>{translate("part_view.thinking")}</summary>
             <pre class={`mt-2 whitespace-pre-wrap break-words text-xs text-gray-12`.trim()}>
               {clampText(String((p() as { text: string }).text), 2000)}
             </pre>
@@ -874,7 +877,7 @@ export default function PartView(props: Props) {
 
             <Show when={diagnostics().length > 0}>
               <div class={`rounded-lg border ${panelBgClass()} p-2`.trim()}>
-                <div class={`text-[11px] font-medium ${subtleTextClass()}`.trim()}>Diagnostics</div>
+                <div class={`text-[11px] font-medium ${subtleTextClass()}`.trim()}>{translate("part_view.diagnostics")}</div>
                 <div class="mt-2 grid gap-2">
                   <For each={diagnostics()}>
                     {(diag: any) => (
@@ -902,7 +905,7 @@ export default function PartView(props: Props) {
 
             <Show when={diffText()}>
               <div class={`rounded-lg border ${panelBgClass()} p-2`.trim()}>
-                <div class={`text-[11px] font-medium ${subtleTextClass()}`.trim()}>Diff</div>
+                <div class={`text-[11px] font-medium ${subtleTextClass()}`.trim()}>{translate("part_view.diff")}</div>
                 <div class="mt-2 grid gap-1 rounded-md overflow-hidden">
                   <For each={diffLines()}>
                     {(line) => (
@@ -949,7 +952,7 @@ export default function PartView(props: Props) {
 
             <Show when={showToolOutput() && hasReadXmlOutput()}>
               <details class={`rounded-lg ${panelBgClass()} p-2`.trim()}>
-                <summary class={`cursor-pointer text-xs ${subtleTextClass()}`.trim()}>Raw read output</summary>
+                <summary class={`cursor-pointer text-xs ${subtleTextClass()}`.trim()}>{translate("part_view.raw_read_output")}</summary>
                 <pre class={`mt-2 whitespace-pre-wrap break-words text-xs text-gray-12`.trim()}>
                   {outputPreview()}
                 </pre>
@@ -961,13 +964,13 @@ export default function PartView(props: Props) {
                 class={`text-[11px] ${subtleTextClass()} hover:text-gray-12 transition-colors`}
                 onClick={() => setExpandedOutput((current) => !current)}
               >
-                {expandedOutput() ? "Show less" : "Show more"}
+                {expandedOutput() ? translate("part_view.show_less") : translate("part_view.show_more")}
               </button>
             </Show>
 
             <Show when={showToolOutput() && toolInput() != null}>
               <details class={`rounded-lg ${panelBgClass()} p-2`.trim()}>
-                <summary class={`cursor-pointer text-xs ${subtleTextClass()}`.trim()}>Input</summary>
+                <summary class={`cursor-pointer text-xs ${subtleTextClass()}`.trim()}>{translate("part_view.input")}</summary>
                 <pre class={`mt-2 whitespace-pre-wrap break-words text-xs text-gray-12`.trim()}>
                   {safeStringify(toolInput())}
                 </pre>
@@ -987,7 +990,7 @@ export default function PartView(props: Props) {
 
       <Match when={p().type === "step-start" || p().type === "step-finish"}>
         <div class={`text-xs ${subtleTextClass()}`.trim()}>
-          {p().type === "step-start" ? "Step started" : "Step finished"}
+          {p().type === "step-start" ? translate("part_view.step_started") : translate("part_view.step_finished")}
           <Show when={"reason" in p() && (p() as any).reason}>
             <span class={tone() === "dark" ? "text-gray-12/80" : "text-gray-11"}>
               {" "}· {String((p() as any).reason)}

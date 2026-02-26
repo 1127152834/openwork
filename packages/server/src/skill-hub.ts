@@ -2,8 +2,9 @@ import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
 import type { HubSkillItem } from "./types.js";
-import { ApiError } from "./errors.js";
+import { apiError } from "./errors.js";
 import { parseFrontmatter } from "./frontmatter.js";
+import { tr } from "./i18n.js";
 import { exists } from "./utils.js";
 import { validateSkillName } from "./validators.js";
 import { projectSkillsDir } from "./workspace-files.js";
@@ -36,7 +37,7 @@ async function fetchJson(url: string): Promise<any> {
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new ApiError(502, "hub_fetch_failed", `Failed to fetch hub data (${res.status}): ${text || url}`);
+    throw apiError(502, "hub_fetch_failed", tr("hub_fetch_data_failed", { status: res.status, detail: text || url }));
   }
   return res.json();
 }
@@ -50,7 +51,7 @@ async function fetchText(url: string): Promise<string> {
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new ApiError(502, "hub_fetch_failed", `Failed to fetch hub data (${res.status}): ${text || url}`);
+    throw apiError(502, "hub_fetch_failed", tr("hub_fetch_data_failed", { status: res.status, detail: text || url }));
   }
   return res.text();
 }
@@ -168,7 +169,7 @@ function resolveSafeChild(baseDir: string, child: string): string {
   const target = resolve(baseDir, child);
   if (target === base) return target;
   if (!target.startsWith(base + "/") && !target.startsWith(base + "\\")) {
-    throw new ApiError(400, "invalid_path", "Invalid file path");
+    throw apiError(400, "invalid_path", tr("invalid_file_path"));
   }
   return target;
 }
@@ -204,7 +205,7 @@ export async function installHubSkill(
     }));
 
   if (!files.length) {
-    throw new ApiError(404, "hub_skill_not_found", `Hub skill not found: ${name}`);
+    throw apiError(404, "hub_skill_not_found", tr("hub_skill_not_found_named", { name }));
   }
 
   let written = 0;
@@ -229,7 +230,7 @@ export async function installHubSkill(
     });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new ApiError(502, "hub_fetch_failed", `Failed to fetch hub file (${res.status}): ${text || file.path}`);
+      throw apiError(502, "hub_fetch_failed", tr("hub_fetch_file_failed", { status: res.status, detail: text || file.path }));
     }
     const buf = new Uint8Array(await res.arrayBuffer());
     await writeFile(destPath, buf);
@@ -244,7 +245,7 @@ export async function installHubSkill(
 
   // Ensure the canonical entrypoint exists.
   if (!(await exists(skillMdPath))) {
-    throw new ApiError(502, "hub_install_failed", `Hub skill install failed (missing SKILL.md): ${name}`);
+    throw apiError(502, "hub_install_failed", tr("hub_install_missing_skill_md", { name }));
   }
 
   return {

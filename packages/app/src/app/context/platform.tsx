@@ -1,4 +1,5 @@
 import { createContext, useContext, type ParentProps } from "solid-js";
+import { currentLocale, t } from "../../i18n";
 
 export type SyncStorage = {
   getItem(key: string): string | null;
@@ -40,7 +41,7 @@ export function PlatformProvider(props: ParentProps & { value: Platform }) {
 export function usePlatform() {
   const context = useContext(PlatformContext);
   if (!context) {
-    throw new Error("Platform context is missing");
+    throw new Error(t("platform.context_missing", currentLocale()));
   }
   return context;
 }

@@ -1,0 +1,112 @@
+file,line,layer,category,severity,snippet
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,104,app_ui,ui_literal_or_error,P3,    description: \"Create a one-page $pdf that summarizes this app.\";
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,109,app_ui,ui_literal_or_error,P3,    description: \"Summarize last week's PRs by teammate and theme.\";
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,315,app_ui,ui_literal_or_error,P3,                placeholder=\"Choose a folder\"
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,333,app_ui,jsx_text,P3,                <label class=\"text-[11px] font-bold uppercase tracking-wider text-gray-8\">Schedule</label>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,36,app_ui,ui_literal_or_error,P3,  { id: \"new-thread\"; label: \"New thread\"; icon: Plus };
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,37,app_ui,ui_literal_or_error,P3,  { id: \"automations\"; label: \"Automations\"; icon: History };
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,38,app_ui,ui_literal_or_error,P3,  { id: \"skills\"; label: \"Skills\"; icon: Zap };
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,411,app_ui,jsx_text,P3,                  <div class=\"text-sm font-semibold text-gray-12\">OpenWork</div>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,412,app_ui,jsx_text,P3,                  <div class=\"text-xs text-gray-9\">Proto v1 UX</div>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,439,app_ui,jsx_text,P3,                <span>Threads</span>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,474,app_ui,ui_literal_or_error,P3,                        placeholder=\"Search skills\"
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,489,app_ui,jsx_text,P3,                    <h2 class=\"text-2xl font-semibold text-gray-12\">Skills</h2>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,491,app_ui,jsx_text,P3,                      Give Codex superpowers. <span class=\"text-blue-9\">Learn more</span>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,496,app_ui,jsx_text,P3,                    <h3 class=\"mb-4 text-[11px] font-bold uppercase tracking-widest text-gray-8\">Installed</h3>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,51,app_ui,ui_literal_or_error,P3,  { icon: Calendar; description: \"Scan recent commits and flag riskier diffs.\"; color: \"text-red-9\" };
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,512,app_ui,jsx_text,P3,                    <h3 class=\"mb-4 text-[11px] font-bold uppercase tracking-widest text-gray-8\">Recommended</h3>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,52,app_ui,ui_literal_or_error,P3,  { icon: BookOpen; description: \"Draft weekly release notes from merged PRs.\"; color: \"text-blue-9\" };
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,53,app_ui,ui_literal_or_error,P3,  { icon: MessageSquare; description: \"Summarize yesterday's git activity by repo.\"; color: \"text-purple-9\" };
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,54,app_ui,ui_literal_or_error,P3,  { icon: TrendingUp; description: \"Watch CI failures and surface recurring flakes.\"; color: \"text-indigo-9\" };
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,55,app_ui,ui_literal_or_error,P3,  { icon: Trophy; description: \"Build a tiny classic game for a team demo.\"; color: \"text-amber-9\" };
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,554,app_ui,jsx_text,P3,                      <h2 class=\"text-2xl font-semibold text-gray-12\">Automations</h2>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,559,app_ui,jsx_text,P3,                    <p class=\"mt-2 text-sm text-gray-9\">Automate work by setting up scheduled tasks.</p>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,56,app_ui,ui_literal_or_error,P3,  { icon: Brain; description: \"Suggest the next skills to install for this worker.\"; color: \"text-pink-9\" };
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,581,app_ui,jsx_text,P3,                  <h1 class=\"text-sm font-semibold text-gray-12\">New thread</h1>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,604,app_ui,jsx_text,P3,                    <h2 class=\"text-3xl font-semibold text-gray-12\">Let's build</h2>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,62,app_ui,ui_literal_or_error,P3,    title: \"Remotion Best Practices\";
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,627,app_ui,ui_literal_or_error,P3,                        placeholder=\"Ask Codex anything...\"
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,63,app_ui,ui_literal_or_error,P3,    description: \"Best practices for Remotion - Video creation in React\";
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,68,app_ui,ui_literal_or_error,P3,    title: \"Skill Creator\";
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,69,app_ui,ui_literal_or_error,P3,    description: \"Create or update a skill\";
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,73,app_ui,ui_literal_or_error,P3,    title: \"Skill Installer\";
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,74,app_ui,ui_literal_or_error,P3,    description: \"Install curated skills from openai/skills or other repos\";
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,81,app_ui,ui_literal_or_error,P3,    title: \"Atlas\";
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,82,app_ui,ui_literal_or_error,P3,    description: \"Manage tabs in ChatGPT Atlas and access your...\";
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,86,app_ui,ui_literal_or_error,P3,    title: \"Develop Web Game\";
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,87,app_ui,ui_literal_or_error,P3,    description: \"Web game dev + Playwright test loop\";
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,91,app_ui,ui_literal_or_error,P3,    title: \"Doc\";
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,92,app_ui,ui_literal_or_error,P3,    description: \"Edit and review docx files\";
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-v1-ux.tsx,99,app_ui,ui_literal_or_error,P3,    description: \"Build a classic Snake game in this repo.\";
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,100,app_ui,ui_literal_or_error,P3,  { id: \"skills\"; label: \"Skills\"; icon: Folder };
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,101,app_ui,ui_literal_or_error,P3,  { id: \"settings\"; label: \"Settings\"; icon: Settings };
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,102,app_ui,ui_literal_or_error,P3,  { id: \"mcp\"; label: \"MCPs\"; icon: Server };
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,121,app_ui,jsx_text,P3,              <h1 class=\"text-3xl font-semibold text-gray-12\">Multi-workspace flow preview.</h1>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,154,app_ui,jsx_text,P3,                  <h2 class=\"text-3xl font-bold tracking-tight text-gray-12\">OpenWork</h2>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,156,app_ui,jsx_text,P3,                <h3 class=\"text-xl text-gray-11\">Choose how to connect</h3>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,165,app_ui,jsx_text,P3,                    <h4 class=\"text-xl font-medium text-gray-12 mb-2\">Run on this machine</h4>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,177,app_ui,jsx_text,P3,                    <h4 class=\"text-xl font-medium text-gray-12 mb-2\">Connect to a host</h4>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,188,app_ui,jsx_text,P3,                    <div class=\"text-xs font-semibold text-gray-10 uppercase tracking-wider\">Workspaces</div>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,189,app_ui,jsx_text,P3,                    <div class=\"mt-1 text-sm text-gray-12\">Add a workspace folder or import one.</div>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,192,app_ui,jsx_text,P3,                    <Button variant=\"secondary\" class=\"text-xs px-3 py-1.5\">Pick folder</Button>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,193,app_ui,jsx_text,P3,                    <Button variant=\"outline\" class=\"text-xs px-3 py-1.5\">Import config</Button>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,204,app_ui,jsx_text,P3,                        <Button variant=\"ghost\" class=\"text-xs px-2 py-1\">Use</Button>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,220,app_ui,jsx_text,P3,                  <span class=\"font-bold text-lg tracking-tight\">OpenWork</span>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,241,app_ui,jsx_text,P3,                <Button variant=\"secondary\" class=\"w-full\">Connect</Button>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,242,app_ui,jsx_text,P3,                <Button variant=\"outline\" class=\"w-full\">Settings</Button>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,254,app_ui,jsx_text,P3,                  <h2 class=\"text-lg font-medium\">Dashboard</h2>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,273,app_ui,jsx_text,P3,                        <h3 class=\"text-2xl font-semibold text-gray-12\">What should we do today?</h3>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,274,app_ui,jsx_text,P3,                        <p class=\"text-gray-11\">Describe an outcome. OpenWork will run it and keep an audit trail.</p>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,279,app_ui,ui_literal_or_error,P3,                            placeholder=\"Draft a task to run...\"
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,282,app_ui,jsx_text,P3,                          <button class=\"rounded-xl bg-gray-12 px-3 py-1.5 text-xs font-semibold text-gray-1\">Run</button>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,291,app_ui,jsx_text,P3,                    <h3 class=\"text-sm font-medium text-gray-11 uppercase tracking-wider\">Workspaces</h3>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,316,app_ui,jsx_text,P3,                            <span>Last active: 2h ago</span>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,328,app_ui,jsx_text,P3,                  <h3 class=\"text-sm font-medium text-gray-11 uppercase tracking-wider\">Recent Sessions</h3>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,372,app_ui,jsx_text,P3,                <span class=\"text-xs text-gray-10\">Session: Reconcile vendor overages</span>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,375,app_ui,jsx_text,P3,                <Button variant=\"outline\" class=\"text-xs\">Rename</Button>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,376,app_ui,jsx_text,P3,                <Button class=\"text-xs\">New Task</Button>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,404,app_ui,jsx_text,P3,                      <div class=\"text-xs text-gray-9\">User</div>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,405,app_ui,jsx_text,P3,                      <div class=\"text-sm text-gray-12\">Please reconcile vendor overages for the last month.</div>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,408,app_ui,jsx_text,P3,                      <div class=\"text-xs text-gray-9\">Assistant</div>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,438,app_ui,ui_literal_or_error,P3,                  placeholder=\"Describe a task...\"
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,441,app_ui,jsx_text,P3,                <button class=\"rounded-xl bg-gray-12 px-3 py-1.5 text-xs font-semibold text-gray-1\">Send</button>
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,57,app_ui,ui_literal_or_error,P3,    title: \"Reconcile vendor overages\";
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,65,app_ui,ui_literal_or_error,P3,    title: \"Generate QA report\";
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,73,app_ui,ui_literal_or_error,P3,    title: \"Sync policy checklist\";
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,98,app_ui,ui_literal_or_error,P3,  { id: \"scheduled\"; label: \"Schedule\"; icon: Command };
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/app/src/app/pages/proto-workspaces.tsx,99,app_ui,ui_literal_or_error,P3,  { id: \"sessions\"; label: \"Sessions\"; icon: Play };
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/desktop/src-tauri/src/commands/orchestrator.rs,1012,desktop_tauri,rust_output,P2,    eprintln!(
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/desktop/src-tauri/src/commands/orchestrator.rs,1025,desktop_tauri,rust_output,P2,        eprintln!(
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/desktop/src-tauri/src/commands/orchestrator.rs,447,desktop_tauri,rust_output,P2,    eprintln!(
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/desktop/src-tauri/src/commands/orchestrator.rs,641,desktop_tauri,rust_output,P2,    eprintln!(
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/desktop/src-tauri/src/commands/orchestrator.rs,732,desktop_tauri,rust_output,P2,        eprintln!(
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/desktop/src-tauri/src/commands/orchestrator.rs,867,desktop_tauri,rust_output,P2,        eprintln!(
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/desktop/src-tauri/src/commands/orchestrator.rs,877,desktop_tauri,rust_output,P2,    eprintln!(
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/desktop/src-tauri/src/commands/orchestrator.rs,907,desktop_tauri,rust_output,P2,    eprintln!(\"[sandbox-doctor][at={}] start\"; now_ms());
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/desktop/src-tauri/src/commands/orchestrator.rs,922,desktop_tauri,rust_output,P2,            eprintln!(
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/desktop/src-tauri/src/commands/orchestrator.rs,942,desktop_tauri,rust_output,P2,    eprintln!(
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/desktop/src-tauri/src/commands/orchestrator.rs,960,desktop_tauri,rust_output,P2,        eprintln!(
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/desktop/src-tauri/src/commands/orchestrator.rs,988,desktop_tauri,rust_output,P2,            eprintln!(
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/desktop/src-tauri/src/commands/workspace.rs,106,desktop_tauri,rust_output,P2,    println!(\"[workspace] set_active request: {workspace_id}\");
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/desktop/src-tauri/src/commands/workspace.rs,122,desktop_tauri,rust_output,P2,    println!(\"[workspace] set_active complete: {id}\");
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/desktop/src-tauri/src/commands/workspace.rs,136,desktop_tauri,rust_output,P2,    println!(\"[workspace] update display name request: {workspace_id}\");
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/desktop/src-tauri/src/commands/workspace.rs,157,desktop_tauri,rust_output,P2,    println!(\"[workspace] update display name complete: {id}\");
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/desktop/src-tauri/src/commands/workspace.rs,173,desktop_tauri,rust_output,P2,    println!(\"[workspace] create local request\");
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/desktop/src-tauri/src/commands/workspace.rs,223,desktop_tauri,rust_output,P2,    println!(\"[workspace] create local complete: {id}\");
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/desktop/src-tauri/src/commands/workspace.rs,247,desktop_tauri,rust_output,P2,    println!(\"[workspace] create remote request\");
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/desktop/src-tauri/src/commands/workspace.rs,26,desktop_tauri,rust_output,P2,    println!(\"[workspace] bootstrap\");
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/desktop/src-tauri/src/commands/workspace.rs,335,desktop_tauri,rust_output,P2,    println!(\"[workspace] create remote complete: {id}\");
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/desktop/src-tauri/src/commands/workspace.rs,359,desktop_tauri,rust_output,P2,    println!(\"[workspace] update remote request: {workspace_id}\");
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/desktop/src-tauri/src/commands/workspace.rs,460,desktop_tauri,rust_output,P2,    println!(\"[workspace] update remote complete: {id}\");
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/desktop/src-tauri/src/commands/workspace.rs,60,desktop_tauri,rust_output,P2,    println!(\"[workspace] forget request: {workspace_id}\");
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/desktop/src-tauri/src/commands/workspace.rs,92,desktop_tauri,rust_output,P2,    println!(\"[workspace] forget complete\");
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/desktop/src-tauri/src/orchestrator/manager.rs,31,desktop_tauri,rust_output,P2,                eprintln!(\"[orchestrator] Failed to request shutdown: {error}\");
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/desktop/src-tauri/src/workspace/files.rs,356,desktop_tauri,rust_output,P2,            println!(\"[workspace] Failed to seed creator skills: {err}\");
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/server/src/toy-ui.ts,1009,server_api,api_error_payload,P3,    throw new Error(\"sse_failed: \" + res.status);
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/server/src/toy-ui.ts,1108,server_api,api_error_payload,P3,  if (!token) throw new Error(\"token_missing\");
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/server/src/toy-ui.ts,1177,server_api,api_error_payload,P3,  if (!raw) throw new Error(\"import_json_missing\");
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/server/src/toy-ui.ts,1180,server_api,api_error_payload,P3,  if (!payload) throw new Error(\"import_json_invalid\");
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/server/src/toy-ui.ts,1323,server_api,api_error_payload,P3,  if (!name) throw new Error(\"name_required\");
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/server/src/toy-ui.ts,1324,server_api,api_error_payload,P3,  if (!prompt) throw new Error(\"prompt_required\");
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/server/src/toy-ui.ts,809,server_api,api_error_payload,P3,  if (!id) throw new Error(\"session_create_failed\");
+/Users/zhangtiancheng/Documents/项目/新项目/openwork/packages/server/src/toy-ui.ts,898,server_api,api_error_payload,P3,        if (!res.ok) throw new Error(\"download_failed: \" + res.status);

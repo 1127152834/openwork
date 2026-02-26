@@ -217,9 +217,9 @@ export default function OnboardingView(props: OnboardingViewProps) {
               <div class="rounded-2xl border border-gray-6 bg-gray-1/50 px-4 py-3">
                 <div class="flex items-center justify-between gap-4">
                   <div class="min-w-0">
-                    <div class="text-xs font-semibold text-gray-10 uppercase tracking-wider">Import</div>
-                    <div class="mt-1 text-sm text-gray-12">Use an existing workspace config.</div>
-                    <div class="text-xs text-gray-10">Imports `.opencode` and `opencode.json` only.</div>
+                    <div class="text-xs font-semibold text-gray-10 uppercase tracking-wider">{translate("onboarding.import_label")}</div>
+                    <div class="mt-1 text-sm text-gray-12">{translate("onboarding.import_description")}</div>
+                    <div class="text-xs text-gray-10">{translate("onboarding.import_scope_hint")}</div>
                   </div>
                   <Button
                     variant="secondary"
@@ -227,7 +227,7 @@ export default function OnboardingView(props: OnboardingViewProps) {
                     onClick={props.onImportWorkspaceConfig}
                     disabled={props.importingWorkspaceConfig || props.busy}
                   >
-                    Import config
+                    {translate("session.import_config")}
                   </Button>
                 </div>
               </div>
@@ -367,9 +367,9 @@ export default function OnboardingView(props: OnboardingViewProps) {
                         </div>
                         <Show when={isWindowsPlatform()}>
                           <div class="text-xs text-gray-10 space-y-1 font-mono">
-                            <div>choco install opencode</div>
-                            <div>scoop install extras/opencode</div>
-                            <div>npm install -g opencode-ai</div>
+                            <div>{translate("onboarding.cli_install_cmd_choco")}</div>
+                            <div>{translate("onboarding.cli_install_cmd_scoop")}</div>
+                            <div>{translate("onboarding.cli_install_cmd_npm")}</div>
                           </div>
                         </Show>
                         <div class="flex gap-2 pt-2">
@@ -594,7 +594,7 @@ export default function OnboardingView(props: OnboardingViewProps) {
                 <div class="">
                   <OpenWorkLogo size={48} />
                 </div>
-                <h1 class="text-3xl font-bold tracking-tight text-gray-12">OpenWork</h1>
+                <h1 class="text-3xl font-bold tracking-tight text-gray-12">{translate("onboarding.app_name")}</h1>
               </div>
               <h2 class="text-xl text-gray-11">{translate("onboarding.welcome_title")}</h2>
             </div>

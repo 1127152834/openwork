@@ -2,6 +2,7 @@ import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount }
 import type { Agent } from "@opencode-ai/sdk/v2/client";
 import fuzzysort from "fuzzysort";
 import { ArrowUp, AtSign, Check, ChevronDown, File as FileIcon, Paperclip, Square, Terminal, X, Zap } from "lucide-solid";
+import { currentLocale, t } from "../../../i18n";
 
 import type { ComposerAttachment, ComposerDraft, ComposerPart, PromptMode, SlashCommandOption } from "../../types";
 import { perfNow, recordPerfLog } from "../../lib/perf-log";
@@ -209,12 +210,12 @@ const MAX_RECENT_EMITS = 400;
 const DRAFT_FLUSH_DEBOUNCE_MS = 140;
 
 const MODEL_VARIANT_OPTIONS = [
-  { value: "none", label: "None" },
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
-  { value: "xhigh", label: "X-High" },
-];
+  { value: "none", labelKey: "app.model_variant_none" },
+  { value: "low", labelKey: "app.model_variant_low" },
+  { value: "medium", labelKey: "app.model_variant_medium" },
+  { value: "high", labelKey: "app.model_variant_high" },
+  { value: "xhigh", labelKey: "app.model_variant_xhigh" },
+] as const;
 
 const partsToText = (parts: ComposerPart[]) =>
   parts
@@ -445,6 +446,8 @@ const buildRangeFromOffsets = (root: HTMLElement, start: number, end: number) =>
 };
 
 export default function Composer(props: ComposerProps) {
+  const translate = (key: string) => t(key, currentLocale());
+
   let editorRef: HTMLDivElement | undefined;
   let fileInputRef: HTMLInputElement | undefined;
   let inboxFileInputRef: HTMLInputElement | undefined;
@@ -1062,7 +1065,7 @@ export default function Composer(props: ComposerProps) {
 
   const addAttachments = async (files: File[]) => {
     if (attachmentsDisabled()) {
-      props.onToast(props.attachmentsDisabledReason ?? "Attachments are unavailable.");
+      props.onToast(props.attachmentsDisabledReason ?? translate("composer.attachments_unavailable"));
       return;
     }
     const next: ComposerAttachment[] = [];
@@ -1527,7 +1530,7 @@ export default function Composer(props: ComposerProps) {
   });
 
   return (
-    <div class="px-4 pb-4 pt-0 bg-dls-surface sticky bottom-0 z-20" style={{ contain: "layout style" }}>
+    <div class="px-3 pb-2 pt-0 bg-dls-surface sticky bottom-0 z-20" style={{ contain: "layout style" }}>
       <div class="max-w-3xl mx-auto">
         <div
           class={`bg-dls-surface border border-dls-border rounded-2xl overflow-visible transition-all relative group/input ${mentionOpen() || slashOpen() ? "rounded-t-none border-t-transparent shadow-none" : "shadow-xl"
@@ -1542,10 +1545,10 @@ export default function Composer(props: ComposerProps) {
             <div class="absolute bottom-full left-[-1px] right-[-1px] z-30">
               <div class="rounded-t-3xl border border-dls-border border-b-0 bg-dls-surface shadow-xl overflow-hidden">
                 <div class="p-2 bg-dls-surface max-h-64 overflow-y-auto" onMouseDown={(event: MouseEvent) => event.preventDefault()}>
-                  <Show
-                    when={mentionVisible().length}
-                    fallback={<div class="px-3 py-2 text-xs text-dls-secondary">No matches found.</div>}
-                  >
+                    <Show
+                      when={mentionVisible().length}
+                      fallback={<div class="px-3 py-2 text-xs text-dls-secondary">{translate("composer.no_matches_found")}</div>}
+                    >
                     <For each={mentionVisible()}>
                       {(option: MentionOption) => {
                         const optionIndex = createMemo(() => mentionOptions().findIndex((item) => item.id === option.id));
@@ -1607,7 +1610,7 @@ export default function Composer(props: ComposerProps) {
                     when={slashFiltered().length}
                     fallback={
                       <div class="px-3 py-2 text-xs text-dls-secondary">
-                        {slashLoaded() ? "No commands found." : "Loading commands..."}
+                        {slashLoaded() ? translate("composer.no_commands_found") : translate("composer.loading_commands")}
                       </div>
                     }
                   >
@@ -1634,7 +1637,7 @@ export default function Composer(props: ComposerProps) {
                             </div>
                             <Show when={cmd.source && cmd.source !== "command"}>
                               <span class="text-[10px] uppercase tracking-wider text-dls-secondary shrink-0">
-                                {cmd.source === "skill" ? "Skill" : cmd.source === "mcp" ? "MCP" : ""}
+                                {cmd.source === "skill" ? translate("composer.command_source_skill") : cmd.source === "mcp" ? "MCP" : ""}
                               </span>
                             </Show>
                           </button>
@@ -1647,15 +1650,15 @@ export default function Composer(props: ComposerProps) {
             </div>
           </Show>
 
-          <div class="p-3 px-4">
+          <div class="px-3 py-2">
             <Show when={props.showNotionBanner}>
               <button
                 type="button"
                 class="w-full mb-2 flex items-center justify-between gap-3 rounded-xl border border-green-7/20 bg-green-7/10 px-3 py-2 text-left text-sm text-green-12 transition-colors hover:bg-green-7/15"
                 onClick={props.onNotionBannerClick}
               >
-                <span>Try it now: set up my CRM in Notion</span>
-                <span class="text-xs text-green-12 font-medium">Insert prompt</span>
+                <span>{translate("session.try_notion_prompt")}</span>
+                <span class="text-xs text-green-12 font-medium">{translate("session.insert_prompt")}</span>
               </button>
             </Show>
 
@@ -1696,7 +1699,7 @@ export default function Composer(props: ComposerProps) {
               </div>
             </Show>
 
-            <div class="relative min-h-[120px]">
+            <div class="relative min-h-[88px]">
               <Show when={props.toast}>
                 <div class="absolute bottom-full right-0 mb-2 z-30 rounded-xl border border-dls-border bg-dls-surface px-3 py-2 text-xs text-dls-secondary shadow-lg backdrop-blur-md">
                   <div class="flex items-center gap-3">
@@ -1707,7 +1710,7 @@ export default function Composer(props: ComposerProps) {
                         class="shrink-0 rounded-md border border-dls-border bg-dls-hover px-2 py-1 text-[10px] text-dls-text hover:bg-dls-active"
                         onClick={() => inboxFileInputRef?.click()}
                       >
-                        Upload to inbox
+                        {translate("composer.upload_to_inbox")}
                       </button>
                     </Show>
                   </div>
@@ -1717,13 +1720,13 @@ export default function Composer(props: ComposerProps) {
               <div class="flex flex-col gap-2">
                 <div class="flex-1 min-w-0">
                   <Show when={props.isRemoteWorkspace}>
-                    <div class="mb-2 text-[10px] uppercase tracking-wider text-dls-secondary">Remote workspace</div>
+                    <div class="mb-2 text-[10px] uppercase tracking-wider text-dls-secondary">{translate("composer.remote_workspace")}</div>
                   </Show>
 
                   <div class="relative">
                     <Show when={!hasDraftContent()}>
                       <div class="absolute left-0 top-0 text-dls-secondary text-sm leading-relaxed pointer-events-none">
-                        Ask OpenWork...
+                        {translate("session.placeholder")}
                       </div>
                     </Show>
                     <div
@@ -1735,10 +1738,10 @@ export default function Composer(props: ComposerProps) {
                       onKeyDown={handleKeyDown}
                       onPaste={handlePaste}
                       onClick={handleEditorClick}
-                      class="bg-transparent border-none p-0 pb-8 pr-4 text-dls-text focus:ring-0 text-sm leading-relaxed resize-none min-h-[24px] max-h-40 overflow-y-auto outline-none relative z-10"
+                      class="bg-transparent border-none p-0 pb-3 pr-2 text-dls-text focus:ring-0 text-sm leading-relaxed resize-none min-h-[24px] max-h-32 overflow-y-auto outline-none relative z-10"
                     />
 
-                    <div class="mt-3 flex items-center justify-between px-2 pb-2">
+                    <div class="mt-1.5 flex items-center justify-between px-1 pb-0.5">
                       <div class="flex items-center gap-2">
                         <input
                           ref={inboxFileInputRef}
@@ -1779,8 +1782,8 @@ export default function Composer(props: ComposerProps) {
                           disabled={attachmentsDisabled()}
                           title={
                             attachmentsDisabled()
-                              ? props.attachmentsDisabledReason ?? "Attachments are unavailable."
-                              : "Attach files"
+                              ? props.attachmentsDisabledReason ?? translate("composer.attachments_unavailable")
+                              : translate("composer.attach_files")
                           }
                         >
                           <Paperclip size={16} />
@@ -1793,7 +1796,7 @@ export default function Composer(props: ComposerProps) {
                             onClick={props.onToggleAgentPicker}
                             disabled={props.busy}
                             aria-expanded={props.agentPickerOpen}
-                            title="Agent"
+                            title={translate("composer.agent")}
                           >
                             <AtSign size={14} />
                             <span class="max-w-[140px] truncate">{props.agentLabel}</span>
@@ -1803,14 +1806,14 @@ export default function Composer(props: ComposerProps) {
                           <Show when={props.agentPickerOpen}>
                             <div class="absolute left-0 bottom-full mb-2 w-64 rounded-xl border border-dls-border bg-dls-surface shadow-xl backdrop-blur-md overflow-hidden z-40">
                               <div class="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-dls-secondary border-b border-dls-border">
-                                Agent
+                                {translate("composer.agent")}
                               </div>
 
                               <div class="p-2 space-y-1 max-h-64 overflow-y-auto" onMouseDown={(event: MouseEvent) => event.preventDefault()}>
                                 <Show
                                   when={!props.agentPickerBusy}
                                   fallback={
-                                    <div class="px-3 py-2 text-xs text-dls-secondary">Loading agents...</div>
+                                    <div class="px-3 py-2 text-xs text-dls-secondary">{translate("composer.loading_agents")}</div>
                                   }
                                 >
                                   <Show when={!props.agentPickerError}>
@@ -1825,7 +1828,7 @@ export default function Composer(props: ComposerProps) {
                                         props.onSelectAgent(null);
                                       }}
                                     >
-                                      <span>Default agent</span>
+                                      <span>{translate("composer.default_agent")}</span>
                                       <Show when={!props.selectedAgent}>
                                         <Check size={14} class="text-dls-secondary" />
                                       </Show>
@@ -1884,14 +1887,14 @@ export default function Composer(props: ComposerProps) {
                             disabled={props.busy}
                             aria-expanded={variantMenuOpen()}
                           >
-                            <span>Thinking</span>
+                            <span>{translate("composer.thinking")}</span>
                             <span class="font-mono text-dls-text">{props.modelVariantLabel}</span>
                             <ChevronDown size={14} />
                           </button>
                           <Show when={variantMenuOpen()}>
                             <div class="absolute left-0 bottom-full mb-2 w-48 rounded-xl border border-dls-border bg-dls-surface shadow-xl backdrop-blur-md overflow-hidden z-40">
                               <div class="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-dls-secondary border-b border-dls-border">
-                                Thinking effort
+                                {translate("composer.thinking_effort")}
                               </div>
                               <div class="p-2 space-y-1">
                                 <For each={MODEL_VARIANT_OPTIONS}>
@@ -1907,9 +1910,9 @@ export default function Composer(props: ComposerProps) {
                                         setVariantMenuOpen(false);
                                       }}
                                     >
-                                      <span>{option.label}</span>
+                                      <span>{translate(option.labelKey)}</span>
                                       <Show when={activeVariant() === option.value}>
-                                        <span class="text-[10px] uppercase tracking-wider text-dls-secondary">Active</span>
+                                        <span class="text-[10px] uppercase tracking-wider text-dls-secondary">{translate("composer.active")}</span>
                                       </Show>
                                     </button>
                                   )}
@@ -1931,7 +1934,7 @@ export default function Composer(props: ComposerProps) {
                                 ? "bg-dls-active text-dls-secondary"
                                 : "bg-dls-accent text-white"
                                 }`}
-                              title="Send"
+                              title={translate("composer.send")}
                             >
                               <ArrowUp size={18} />
                             </button>
@@ -1941,7 +1944,7 @@ export default function Composer(props: ComposerProps) {
                             type="button"
                             onClick={() => props.onStop()}
                             class="p-1.5 rounded-full bg-gray-12 text-gray-1 hover:bg-gray-11 transition-colors"
-                            title="Stop"
+                            title={translate("composer.stop")}
                           >
                             <Square size={14} fill="currentColor" />
                           </button>

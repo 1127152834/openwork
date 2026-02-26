@@ -2,6 +2,7 @@ import { createContext, createEffect, createMemo, createSignal, onCleanup, useCo
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 
+import { t, currentLocale } from "../../i18n";
 import { isTauriRuntime } from "../utils";
 
 export function normalizeServerUrl(input: string) {
@@ -205,7 +206,7 @@ export function ServerProvider(props: ParentProps & { defaultUrl: string }) {
 export function useServer() {
   const context = useContext(ServerContext);
   if (!context) {
-    throw new Error("Server context is missing");
+    throw new Error(t("server.context_missing", currentLocale()));
   }
   return context;
 }

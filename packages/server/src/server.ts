@@ -10,7 +10,7 @@ import { deleteSkill, listSkills, upsertSkill } from "./skills.js";
 import { installHubSkill, listHubSkills } from "./skill-hub.js";
 import { deleteCommand, listCommands, upsertCommand } from "./commands.js";
 import { deleteScheduledJob, listScheduledJobs, resolveScheduledJob } from "./scheduler.js";
-import { ApiError, formatError } from "./errors.js";
+import { ApiError, apiError, formatError } from "./errors.js";
 import { readJsoncFile, updateJsoncTopLevel, writeJsoncFile } from "./jsonc.js";
 import { recordAudit, readAuditEntries, readLastAudit } from "./audit.js";
 import { ReloadEventStore } from "./events.js";
@@ -21,6 +21,7 @@ import { workspaceIdForPath } from "./workspaces.js";
 import { sanitizeCommandName, validateMcpName } from "./validators.js";
 import { TokenService } from "./tokens.js";
 import { TOY_UI_CSS, TOY_UI_HTML, TOY_UI_JS, cssResponse, htmlResponse, jsResponse } from "./toy-ui.js";
+import { resolveServerLocale, tr, withServerLocale } from "./i18n.js";
 import pkg from "../package.json" with { type: "json" };
 
 const SERVER_VERSION = pkg.version;
@@ -170,7 +171,7 @@ function assertOpencodeProxyAllowed(actor: Actor, method: string, proxyPath: str
   const scope = actor.scope ?? "viewer";
 
   if (scope === "viewer" && m !== "GET" && m !== "HEAD") {
-    throw new ApiError(403, "forbidden", "Viewer tokens are read-only");
+    throw apiError(403, "forbidden", tr("viewer_tokens_read_only"));
   }
 
   // Prevent collaborators/viewers from self-approving OpenCode permission requests via the proxy.
@@ -178,7 +179,7 @@ function assertOpencodeProxyAllowed(actor: Actor, method: string, proxyPath: str
   if (scope !== "owner" && m !== "GET" && m !== "HEAD") {
     const normalized = normalizeOpencodeProxyPath(proxyPath);
     if (/\/permission\/[^/]+\/reply$/.test(normalized)) {
-      throw new ApiError(403, "forbidden", "Only owner tokens can reply to permission requests");
+      throw apiError(403, "forbidden", tr("only_owner_can_reply_permissions"));
     }
   }
 }
@@ -274,179 +275,181 @@ export function startServer(config: ServerConfig) {
     hostname: config.host,
     port: config.port,
     fetch: async (request: Request) => {
-      const url = new URL(request.url);
-      const startedAt = Date.now();
-      let authMode: AuthMode = "none";
-      let proxyService: "opencode" | "opencode-router" | undefined;
-      let proxyBaseUrl: string | undefined;
-      let errorMessage: string | undefined;
+      return withServerLocale(resolveServerLocale(request), async () => {
+        const url = new URL(request.url);
+        const startedAt = Date.now();
+        let authMode: AuthMode = "none";
+        let proxyService: "opencode" | "opencode-router" | undefined;
+        let proxyBaseUrl: string | undefined;
+        let errorMessage: string | undefined;
 
-      const finalize = (response: Response) => {
-        const wrapped = withCors(response, request, config);
-        if (config.logRequests) {
-            logRequest({
-              logger,
-              request,
-              response: wrapped,
-              durationMs: Date.now() - startedAt,
-              authMode,
-              proxyService,
-              proxyBaseUrl,
-              error: errorMessage,
-            });
-        }
-        return wrapped;
-      };
-
-      if (request.method === "OPTIONS") {
-        return finalize(new Response(null, { status: 204 }));
-      }
-
-      const mount = parseWorkspaceMount(url.pathname);
-      if (mount && (mount.restPath === "/opencode" || mount.restPath.startsWith("/opencode/"))) {
-        authMode = "client";
-        try {
-          const actor = await requireClient(request, config, tokens);
-          assertOpencodeProxyAllowed(actor, request.method, mount.restPath);
-          const workspace = await resolveWorkspace(config, mount.workspaceId);
-          proxyService = "opencode";
-          proxyBaseUrl = workspace.baseUrl?.trim() || undefined;
-          const response = await proxyOpencodeRequest({ request, url, workspace, proxyPath: mount.restPath });
-          return finalize(response);
-        } catch (error) {
-          const apiError = error instanceof ApiError
-            ? error
-            : new ApiError(500, "internal_error", "Unexpected server error");
-          errorMessage = apiError.message;
-          return finalize(jsonResponse(formatError(apiError), apiError.status));
-        }
-      }
-
-      if (mount && (mount.restPath === "/opencode-router" || mount.restPath.startsWith("/opencode-router/"))) {
-        const policy = resolveOpenCodeRouterProxyPolicy(request.method, mount.restPath);
-        authMode = policy.auth;
-        try {
-          if (authMode === "host") {
-            await requireHost(request, config, tokens);
-          } else {
-            const actor = await requireClient(request, config, tokens);
-            if (policy.requiredScope && scopeRank(actor.scope ?? "viewer") < scopeRank(policy.requiredScope)) {
-              throw new ApiError(403, "forbidden", "Insufficient token scope", {
-                required: policy.requiredScope,
-                scope: actor.scope,
+        const finalize = (response: Response) => {
+          const wrapped = withCors(response, request, config);
+          if (config.logRequests) {
+              logRequest({
+                logger,
+                request,
+                response: wrapped,
+                durationMs: Date.now() - startedAt,
+                authMode,
+                proxyService,
+                proxyBaseUrl,
+                error: errorMessage,
               });
-            }
           }
-          proxyService = "opencode-router";
-          proxyBaseUrl = resolveOpenCodeRouterBaseUrl();
-          const response = await proxyOpenCodeRouterRequest({ request, url, proxyPath: mount.restPath });
-          return finalize(response);
-        } catch (error) {
-          const apiError = error instanceof ApiError
-            ? error
-            : new ApiError(500, "internal_error", "Unexpected server error");
-          errorMessage = apiError.message;
-          return finalize(jsonResponse(formatError(apiError), apiError.status));
-        }
-      }
+          return wrapped;
+        };
 
-      // Allow clients to use a mounted base URL (e.g. http://host:8787/w/<id>) while
-      // still calling the existing /workspace/:id/* API surface.
-      // Example: baseUrl + "/workspace/<id>/plugins" => "/w/<id>/workspace/<id>/plugins".
-      // We strip the mount prefix and route-match on the rest path.
-      //
-      // Important: when using a mounted base URL, enforce that the nested /workspace/:id
-      // matches the mount workspace id to preserve the "single-workspace" mental model.
-      if (mount && mount.restPath.startsWith("/workspace/")) {
-        const match = mount.restPath.match(/^\/workspace\/([^/]+)/);
-        const nestedId = match?.[1] ? decodeURIComponent(match[1]) : null;
-        if (nestedId && nestedId !== mount.workspaceId) {
+        if (request.method === "OPTIONS") {
+          return finalize(new Response(null, { status: 204 }));
+        }
+
+        const mount = parseWorkspaceMount(url.pathname);
+        if (mount && (mount.restPath === "/opencode" || mount.restPath.startsWith("/opencode/"))) {
+          authMode = "client";
+          try {
+            const actor = await requireClient(request, config, tokens);
+            assertOpencodeProxyAllowed(actor, request.method, mount.restPath);
+            const workspace = await resolveWorkspace(config, mount.workspaceId);
+            proxyService = "opencode";
+            proxyBaseUrl = workspace.baseUrl?.trim() || undefined;
+            const response = await proxyOpencodeRequest({ request, url, workspace, proxyPath: mount.restPath });
+            return finalize(response);
+          } catch (error) {
+            const apiErr = error instanceof ApiError
+              ? error
+              : apiError(500, "internal_error", tr("unexpected_server_error"));
+            errorMessage = apiErr.message;
+            return finalize(jsonResponse(formatError(apiErr), apiErr.status));
+          }
+        }
+
+        if (mount && (mount.restPath === "/opencode-router" || mount.restPath.startsWith("/opencode-router/"))) {
+          const policy = resolveOpenCodeRouterProxyPolicy(request.method, mount.restPath);
+          authMode = policy.auth;
+          try {
+            if (authMode === "host") {
+              await requireHost(request, config, tokens);
+            } else {
+              const actor = await requireClient(request, config, tokens);
+              if (policy.requiredScope && scopeRank(actor.scope ?? "viewer") < scopeRank(policy.requiredScope)) {
+                throw apiError(403, "forbidden", tr("insufficient_token_scope"), {
+                  required: policy.requiredScope,
+                  scope: actor.scope,
+                });
+              }
+            }
+            proxyService = "opencode-router";
+            proxyBaseUrl = resolveOpenCodeRouterBaseUrl();
+            const response = await proxyOpenCodeRouterRequest({ request, url, proxyPath: mount.restPath });
+            return finalize(response);
+          } catch (error) {
+            const apiErr = error instanceof ApiError
+              ? error
+              : apiError(500, "internal_error", tr("unexpected_server_error"));
+            errorMessage = apiErr.message;
+            return finalize(jsonResponse(formatError(apiErr), apiErr.status));
+          }
+        }
+
+        // Allow clients to use a mounted base URL (e.g. http://host:8787/w/<id>) while
+        // still calling the existing /workspace/:id/* API surface.
+        // Example: baseUrl + "/workspace/<id>/plugins" => "/w/<id>/workspace/<id>/plugins".
+        // We strip the mount prefix and route-match on the rest path.
+        //
+        // Important: when using a mounted base URL, enforce that the nested /workspace/:id
+        // matches the mount workspace id to preserve the "single-workspace" mental model.
+        if (mount && mount.restPath.startsWith("/workspace/")) {
+          const match = mount.restPath.match(/^\/workspace\/([^/]+)/);
+          const nestedId = match?.[1] ? decodeURIComponent(match[1]) : null;
+          if (nestedId && nestedId !== mount.workspaceId) {
+            errorMessage = "not_found";
+            return finalize(jsonResponse({ code: "not_found", message: tr("not_found") }, 404));
+          }
+          url.pathname = mount.restPath;
+        }
+
+        if (url.pathname === "/opencode" || url.pathname.startsWith("/opencode/")) {
+          authMode = "client";
+          proxyBaseUrl = config.workspaces[0]?.baseUrl?.trim() || undefined;
+          try {
+            const actor = await requireClient(request, config, tokens);
+            assertOpencodeProxyAllowed(actor, request.method, url.pathname);
+            proxyService = "opencode";
+            const response = await proxyOpencodeRequest({ request, url, workspace: config.workspaces[0] });
+            return finalize(response);
+          } catch (error) {
+            const apiErr = error instanceof ApiError
+              ? error
+              : apiError(500, "internal_error", tr("unexpected_server_error"));
+            errorMessage = apiErr.message;
+            return finalize(jsonResponse(formatError(apiErr), apiErr.status));
+          }
+        }
+
+        if (url.pathname === "/opencode-router" || url.pathname.startsWith("/opencode-router/")) {
+          const policy = resolveOpenCodeRouterProxyPolicy(request.method, url.pathname);
+          authMode = policy.auth;
+          try {
+            if (authMode === "host") {
+              await requireHost(request, config, tokens);
+            } else {
+              const actor = await requireClient(request, config, tokens);
+              if (policy.requiredScope && scopeRank(actor.scope ?? "viewer") < scopeRank(policy.requiredScope)) {
+                throw apiError(403, "forbidden", tr("insufficient_token_scope"), {
+                  required: policy.requiredScope,
+                  scope: actor.scope,
+                });
+              }
+            }
+            proxyService = "opencode-router";
+            proxyBaseUrl = resolveOpenCodeRouterBaseUrl();
+            const response = await proxyOpenCodeRouterRequest({ request, url });
+            return finalize(response);
+          } catch (error) {
+            const apiErr = error instanceof ApiError
+              ? error
+              : apiError(500, "internal_error", tr("unexpected_server_error"));
+            errorMessage = apiErr.message;
+            return finalize(jsonResponse(formatError(apiErr), apiErr.status));
+          }
+        }
+
+        const route = matchRoute(routes, request.method, url.pathname);
+        if (!route) {
           errorMessage = "not_found";
-          return finalize(jsonResponse({ code: "not_found", message: "Not found" }, 404));
+          return finalize(jsonResponse({ code: "not_found", message: tr("not_found") }, 404));
         }
-        url.pathname = mount.restPath;
-      }
 
-      if (url.pathname === "/opencode" || url.pathname.startsWith("/opencode/")) {
-        authMode = "client";
-        proxyBaseUrl = config.workspaces[0]?.baseUrl?.trim() || undefined;
+        authMode = route.auth;
         try {
-          const actor = await requireClient(request, config, tokens);
-          assertOpencodeProxyAllowed(actor, request.method, url.pathname);
-          proxyService = "opencode";
-          const response = await proxyOpencodeRequest({ request, url, workspace: config.workspaces[0] });
+          const actor = route.auth === "host"
+            ? await requireHost(request, config, tokens)
+            : route.auth === "client"
+              ? await requireClient(request, config, tokens)
+              : undefined;
+          const response = await route.handler({
+            request,
+            url,
+            params: route.params,
+            config,
+            approvals,
+            reloadEvents,
+            tokens,
+            actor,
+          });
           return finalize(response);
         } catch (error) {
-          const apiError = error instanceof ApiError
-            ? error
-            : new ApiError(500, "internal_error", "Unexpected server error");
-          errorMessage = apiError.message;
-          return finalize(jsonResponse(formatError(apiError), apiError.status));
-        }
-      }
-
-      if (url.pathname === "/opencode-router" || url.pathname.startsWith("/opencode-router/")) {
-        const policy = resolveOpenCodeRouterProxyPolicy(request.method, url.pathname);
-        authMode = policy.auth;
-        try {
-          if (authMode === "host") {
-            await requireHost(request, config, tokens);
-          } else {
-            const actor = await requireClient(request, config, tokens);
-            if (policy.requiredScope && scopeRank(actor.scope ?? "viewer") < scopeRank(policy.requiredScope)) {
-              throw new ApiError(403, "forbidden", "Insufficient token scope", {
-                required: policy.requiredScope,
-                scope: actor.scope,
-              });
-            }
+          if (!(error instanceof ApiError)) {
+            console.error(error);
           }
-          proxyService = "opencode-router";
-          proxyBaseUrl = resolveOpenCodeRouterBaseUrl();
-          const response = await proxyOpenCodeRouterRequest({ request, url });
-          return finalize(response);
-        } catch (error) {
-          const apiError = error instanceof ApiError
+          const apiErr = error instanceof ApiError
             ? error
-            : new ApiError(500, "internal_error", "Unexpected server error");
-          errorMessage = apiError.message;
-          return finalize(jsonResponse(formatError(apiError), apiError.status));
+            : apiError(500, "internal_error", tr("unexpected_server_error"));
+          errorMessage = apiErr.message;
+          return finalize(jsonResponse(formatError(apiErr), apiErr.status));
         }
-      }
-
-      const route = matchRoute(routes, request.method, url.pathname);
-      if (!route) {
-        errorMessage = "not_found";
-        return finalize(jsonResponse({ code: "not_found", message: "Not found" }, 404));
-      }
-
-      authMode = route.auth;
-      try {
-        const actor = route.auth === "host"
-          ? await requireHost(request, config, tokens)
-          : route.auth === "client"
-            ? await requireClient(request, config, tokens)
-            : undefined;
-        const response = await route.handler({
-          request,
-          url,
-          params: route.params,
-          config,
-          approvals,
-          reloadEvents,
-          tokens,
-          actor,
-        });
-        return finalize(response);
-      } catch (error) {
-        if (!(error instanceof ApiError)) {
-          console.error("[openwork-server] Unhandled error:", error);
-        }
-        const apiError = error instanceof ApiError
-          ? error
-          : new ApiError(500, "internal_error", "Unexpected server error");
-        errorMessage = apiError.message;
-        return finalize(jsonResponse(formatError(apiError), apiError.status));
-      }
+      });
     },
   };
 
@@ -496,7 +499,7 @@ function buildOpencodeProxyUrl(baseUrl: string, path: string, search: string) {
 async function fetchOpencodeJson(workspace: WorkspaceInfo, path: string, init: { method: string; body?: unknown }) {
   const baseUrl = workspace.baseUrl?.trim() ?? "";
   if (!baseUrl) {
-    throw new ApiError(400, "opencode_unconfigured", "OpenCode base URL is missing for this workspace");
+    throw apiError(400, "opencode_unconfigured", tr("opencode_base_url_missing"));
   }
 
   const url = new URL(baseUrl);
@@ -530,7 +533,7 @@ async function fetchOpencodeJson(workspace: WorkspaceInfo, path: string, init: {
     json = null;
   }
   if (!response.ok) {
-    throw new ApiError(502, "opencode_request_failed", "OpenCode request failed", {
+    throw apiError(502, "opencode_request_failed", tr("opencode_request_failed"), {
       status: response.status,
       body: json ?? text,
       path,
@@ -557,7 +560,7 @@ async function proxyOpencodeRequest(input: {
   const workspace = input.workspace;
   const baseUrl = workspace?.baseUrl?.trim() ?? "";
   if (!baseUrl) {
-    throw new ApiError(400, "opencode_unconfigured", "OpenCode base URL is missing for this workspace");
+    throw apiError(400, "opencode_unconfigured", tr("opencode_base_url_missing"));
   }
 
   const proxyPath = input.proxyPath ?? input.url.pathname;
@@ -593,7 +596,7 @@ async function proxyOpencodeRequest(input: {
 function resolveOpenCodeRouterBaseUrl(): string {
   const port = parseInteger(process.env.OPENCODE_ROUTER_HEALTH_PORT);
   if (!port) {
-    throw new ApiError(404, "opencodeRouter_unconfigured", "OpenCodeRouter is not configured on this host");
+    throw apiError(404, "opencodeRouter_unconfigured", tr("opencode_router_unconfigured"));
   }
   return `http://127.0.0.1:${port}`;
 }
@@ -624,7 +627,7 @@ async function proxyOpenCodeRouterRequest(input: {
     return response;
   } catch (error) {
     const port = parseInteger(process.env.OPENCODE_ROUTER_HEALTH_PORT);
-    throw new ApiError(503, "opencodeRouter_unreachable", "OpenCodeRouter is not reachable on this host", {
+    throw apiError(503, "opencodeRouter_unreachable", tr("opencode_router_unreachable"), {
       baseUrl,
       port,
       targetUrl,
@@ -677,11 +680,11 @@ async function requireClient(request: Request, config: ServerConfig, tokens: Tok
   const match = header.match(/^Bearer\s+(.+)$/i);
   const token = match?.[1];
   if (!token) {
-    throw new ApiError(401, "unauthorized", "Invalid bearer token");
+    throw apiError(401, "unauthorized", tr("invalid_bearer_token"));
   }
   const scope = await tokens.scopeForToken(token);
   if (!scope) {
-    throw new ApiError(401, "unauthorized", "Invalid bearer token");
+    throw apiError(401, "unauthorized", tr("invalid_bearer_token"));
   }
   const clientId = request.headers.get("x-openwork-client-id") ?? undefined;
   return { type: "remote", clientId, tokenHash: hashToken(token), scope };
@@ -697,11 +700,11 @@ async function requireHost(request: Request, config: ServerConfig, tokens: Token
   const match = header.match(/^Bearer\s+(.+)$/i);
   const bearer = match?.[1];
   if (!bearer) {
-    throw new ApiError(401, "unauthorized", "Invalid host token");
+    throw apiError(401, "unauthorized", tr("invalid_host_token"));
   }
   const scope = await tokens.scopeForToken(bearer);
   if (scope !== "owner") {
-    throw new ApiError(401, "unauthorized", "Invalid host token");
+    throw apiError(401, "unauthorized", tr("invalid_host_token"));
   }
   const clientId = request.headers.get("x-openwork-client-id") ?? undefined;
   return { type: "remote", clientId, tokenHash: hashToken(bearer), scope };
@@ -834,18 +837,18 @@ function resolveAgentLabLogsDir(workspaceRoot: string): string {
 function clampInt(value: unknown, options: { min: number; max: number; name: string }): number {
   const num = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(num)) {
-    throw new ApiError(400, "invalid_payload", `${options.name} must be a number`);
+    throw apiError(400, "invalid_payload", tr("field_must_be_number", { name: options.name }));
   }
   const int = Math.trunc(num);
   if (int < options.min || int > options.max) {
-    throw new ApiError(400, "invalid_payload", `${options.name} must be between ${options.min} and ${options.max}`);
+    throw apiError(400, "invalid_payload", tr("field_must_be_between", { name: options.name, min: options.min, max: options.max }));
   }
   return int;
 }
 
 function parseAgentLabSchedule(value: unknown): AgentLabSchedule {
   if (!value || typeof value !== "object") {
-    throw new ApiError(400, "invalid_payload", "schedule is required");
+    throw apiError(400, "invalid_payload", tr("schedule_required"));
   }
   const schedule = value as Record<string, unknown>;
   const kind = typeof schedule.kind === "string" ? schedule.kind.trim() : "";
@@ -864,19 +867,19 @@ function parseAgentLabSchedule(value: unknown): AgentLabSchedule {
     const minute = clampInt(schedule.minute, { min: 0, max: 59, name: "schedule.minute" });
     return { kind: "weekly", weekday, hour, minute };
   }
-  throw new ApiError(400, "invalid_payload", "schedule.kind must be interval, daily, or weekly");
+  throw apiError(400, "invalid_payload", tr("schedule_kind_invalid"));
 }
 
 function validateAgentLabAutomationId(value: unknown): string {
   const raw = typeof value === "string" ? value.trim() : "";
   if (!raw) {
-    throw new ApiError(400, "invalid_payload", "automation id is required");
+    throw apiError(400, "invalid_payload", tr("automation_id_required"));
   }
   if (raw.length > 80) {
-    throw new ApiError(400, "invalid_payload", "automation id is too long");
+    throw apiError(400, "invalid_payload", tr("automation_id_too_long"));
   }
   if (!/^[a-zA-Z0-9_-]+$/.test(raw)) {
-    throw new ApiError(400, "invalid_payload", "automation id must match /^[a-zA-Z0-9_-]+$/");
+    throw apiError(400, "invalid_payload", tr("automation_id_pattern_invalid"));
   }
   return raw;
 }
@@ -922,7 +925,7 @@ async function readAgentLabAutomations(workspaceRoot: string): Promise<AgentLabA
       items: normalized,
     };
   } catch {
-    throw new ApiError(422, "invalid_json", "Failed to parse Agent Lab automations");
+    throw apiError(422, "invalid_json", tr("agentlab_parse_failed"));
   }
 }
 
@@ -935,10 +938,10 @@ async function writeAgentLabAutomations(workspaceRoot: string, store: AgentLabAu
 export function normalizeWorkspaceRelativePath(input: string, options: { allowSubdirs: boolean }): string {
   const raw = String(input ?? "").trim();
   if (!raw) {
-    throw new ApiError(400, "invalid_path", "Path is required");
+    throw apiError(400, "invalid_path", tr("path_required"));
   }
   if (raw.includes("\u0000")) {
-    throw new ApiError(400, "invalid_path", "Path contains null byte");
+    throw apiError(400, "invalid_path", tr("path_contains_null_byte"));
   }
 
   // A lot of user-facing surfaces (artifacts, tool logs) reference files as
@@ -952,14 +955,14 @@ export function normalizeWorkspaceRelativePath(input: string, options: { allowSu
 
   const parts = normalized.split("/").filter(Boolean);
   if (!parts.length) {
-    throw new ApiError(400, "invalid_path", "Path is required");
+    throw apiError(400, "invalid_path", tr("path_required"));
   }
   if (!options.allowSubdirs && parts.length > 1) {
-    throw new ApiError(400, "invalid_path", "Subdirectories are not allowed");
+    throw apiError(400, "invalid_path", tr("subdirectories_not_allowed"));
   }
   for (const part of parts) {
     if (part === "." || part === "..") {
-      throw new ApiError(400, "invalid_path", "Path traversal is not allowed");
+      throw apiError(400, "invalid_path", tr("path_traversal_not_allowed"));
     }
   }
   return parts.join("/");
@@ -969,10 +972,10 @@ function resolveSafeChildPath(root: string, child: string): string {
   const rootResolved = resolve(root);
   const candidate = resolve(rootResolved, child);
   if (candidate === rootResolved) {
-    throw new ApiError(400, "invalid_path", "Path must point to a file");
+    throw apiError(400, "invalid_path", tr("path_must_be_file"));
   }
   if (!candidate.startsWith(rootResolved + sep)) {
-    throw new ApiError(400, "invalid_path", "Path traversal is not allowed");
+    throw apiError(400, "invalid_path", tr("path_traversal_not_allowed"));
   }
   return candidate;
 }
@@ -984,13 +987,13 @@ function encodeArtifactId(path: string): string {
 function decodeArtifactId(id: string): string {
   const raw = (id ?? "").trim();
   if (!raw) {
-    throw new ApiError(400, "invalid_artifact", "Artifact id is required");
+    throw apiError(400, "invalid_artifact", tr("artifact_id_required"));
   }
   try {
     const decoded = Buffer.from(raw, "base64url").toString("utf8");
     return normalizeWorkspaceRelativePath(decoded, { allowSubdirs: true });
   } catch {
-    throw new ApiError(400, "invalid_artifact", "Artifact id is invalid");
+    throw apiError(400, "invalid_artifact", tr("artifact_id_invalid"));
   }
 }
 
@@ -1002,7 +1005,7 @@ function decodeInboxId(id: string): string {
   try {
     return decodeArtifactId(id);
   } catch {
-    throw new ApiError(400, "invalid_inbox_item", "Inbox item id is invalid");
+    throw apiError(400, "invalid_inbox_item", tr("inbox_item_id_invalid"));
   }
 }
 
@@ -1103,28 +1106,28 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
 
   addRoute(routes, "GET", "/ui", "none", async () => {
     if (!resolveToyUiEnabled()) {
-      throw new ApiError(404, "ui_disabled", "Toy UI is disabled");
+      throw apiError(404, "ui_disabled", tr("toy_ui_disabled"));
     }
     return htmlResponse(TOY_UI_HTML);
   });
 
   addRoute(routes, "GET", "/w/:id/ui", "none", async () => {
     if (!resolveToyUiEnabled()) {
-      throw new ApiError(404, "ui_disabled", "Toy UI is disabled");
+      throw apiError(404, "ui_disabled", tr("toy_ui_disabled"));
     }
     return htmlResponse(TOY_UI_HTML);
   });
 
   addRoute(routes, "GET", "/ui/assets/toy.css", "none", async () => {
     if (!resolveToyUiEnabled()) {
-      throw new ApiError(404, "ui_disabled", "Toy UI is disabled");
+      throw apiError(404, "ui_disabled", tr("toy_ui_disabled"));
     }
     return cssResponse(TOY_UI_CSS);
   });
 
   addRoute(routes, "GET", "/ui/assets/toy.js", "none", async () => {
     if (!resolveToyUiEnabled()) {
-      throw new ApiError(404, "ui_disabled", "Toy UI is disabled");
+      throw apiError(404, "ui_disabled", tr("toy_ui_disabled"));
     }
     return jsResponse(TOY_UI_JS);
   });
@@ -1213,7 +1216,7 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     const scopeRaw = typeof body.scope === "string" ? body.scope.trim() : "";
     const scope = scopeRaw === "owner" || scopeRaw === "collaborator" || scopeRaw === "viewer" ? scopeRaw : null;
     if (!scope) {
-      throw new ApiError(400, "invalid_scope", "Token scope must be owner, collaborator, or viewer");
+      throw apiError(400, "invalid_scope", tr("token_scope_invalid"));
     }
     const label = typeof body.label === "string" ? body.label.trim() : undefined;
     const issued = await tokens.create(scope, { label });
@@ -1224,7 +1227,7 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     ensureWritable(config);
     const ok = await tokens.revoke(ctx.params.id);
     if (!ok) {
-      throw new ApiError(404, "token_not_found", "Token not found");
+      throw apiError(404, "token_not_found", tr("token_not_found"));
     }
     return jsonResponse({ ok: true });
   });
@@ -1311,7 +1314,7 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const sessionId = (ctx.params.sessionId ?? "").trim();
     if (!sessionId) {
-      throw new ApiError(400, "invalid_payload", "sessionId is required");
+      throw apiError(400, "invalid_payload", tr("session_id_required"));
     }
 
     // OpenCode session deletion via the upstream API.
@@ -1331,7 +1334,7 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     const openwork = body.openwork as Record<string, unknown> | undefined;
 
     if (!opencode && !openwork) {
-      throw new ApiError(400, "invalid_payload", "opencode or openwork updates required");
+      throw apiError(400, "invalid_payload", tr("opencode_or_openwork_required"));
     }
 
     await requireApproval(ctx, {
@@ -1381,7 +1384,7 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
       requestHost,
     });
     if (!token) {
-      throw new ApiError(400, "token_required", "Telegram token is required");
+      throw apiError(400, "token_required", tr("telegram_token_required"));
     }
 
     await requireApproval(ctx, {
@@ -1435,7 +1438,7 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     if (!apply.applied) {
       result.applyError = (typeof result.applyError === "string" && result.applyError.trim())
         ? result.applyError
-        : apply.error ?? "OpenCodeRouter did not apply the update";
+        : apply.error ?? tr("opencode_router_update_not_applied");
       if (typeof apply.status === "number") result.applyStatus = apply.status;
     }
     logOpenCodeRouterDebug("telegram-token:updated", {
@@ -1524,7 +1527,7 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
       requestHost,
     });
     if (!botToken || !appToken) {
-      throw new ApiError(400, "token_required", "Slack botToken and appToken are required");
+      throw apiError(400, "token_required", tr("slack_tokens_required"));
     }
 
     await requireApproval(ctx, {
@@ -1572,7 +1575,7 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     if (!apply.applied) {
       result.applyError = (typeof result.applyError === "string" && result.applyError.trim())
         ? result.applyError
-        : apply.error ?? "OpenCodeRouter did not apply the update";
+        : apply.error ?? tr("opencode_router_update_not_applied");
       if (typeof apply.status === "number") result.applyStatus = apply.status;
     }
     logOpenCodeRouterDebug("slack-tokens:updated", {
@@ -1665,10 +1668,10 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
       pairingCodeInput.trim() &&
       (normalizedPairingCodeInput.length < 6 || normalizedPairingCodeInput.length > 24)
     ) {
-      throw new ApiError(
+      throw apiError(
         400,
         "invalid_pairing_code",
-        "Pairing code must be 6-24 letters or numbers",
+        tr("pairing_code_invalid"),
       );
     }
     const pairingCode =
@@ -1679,21 +1682,21 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     const workspaceIdentityId = normalizeOpenCodeRouterIdentityId(workspace.id);
     const requestedId = typeof body.id === "string" ? normalizeOpenCodeRouterIdentityId(body.id) : "";
     if (requestedId && requestedId !== workspaceIdentityId) {
-      throw new ApiError(
+      throw apiError(
         400,
         "identity_mismatch",
-        `Identity id is scoped to this workspace (${workspace.id}).`,
+        tr("identity_scoped_to_workspace", { workspaceId: workspace.id }),
         { expected: workspaceIdentityId, received: requestedId },
       );
     }
     const identityId = workspaceIdentityId;
     if (identityId === "env") {
-      throw new ApiError(400, "invalid_identity", "Identity id 'env' is reserved");
+      throw apiError(400, "invalid_identity", tr("identity_env_reserved"));
     }
     const healthPort = normalizeHealthPort(body.healthPort);
     const requestHost = ctx.url.hostname;
     if (!token) {
-      throw new ApiError(400, "token_required", "Telegram token is required");
+      throw apiError(400, "token_required", tr("telegram_token_required"));
     }
 
     await requireApproval(ctx, {
@@ -1758,7 +1761,7 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     }
 
     if (!apply.applied) {
-      response.applyError = apply.error ?? "OpenCodeRouter did not apply the update";
+      response.applyError = apply.error ?? tr("opencode_router_update_not_applied");
       if (typeof apply.status === "number") response.applyStatus = apply.status;
     }
 
@@ -1782,16 +1785,16 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     const workspaceIdentityId = normalizeOpenCodeRouterIdentityId(workspace.id);
     const requestedId = normalizeOpenCodeRouterIdentityId(ctx.params.identityId);
     if (requestedId && requestedId !== workspaceIdentityId) {
-      throw new ApiError(
+      throw apiError(
         400,
         "identity_mismatch",
-        `Identity id is scoped to this workspace (${workspace.id}).`,
+        tr("identity_scoped_to_workspace", { workspaceId: workspace.id }),
         { expected: workspaceIdentityId, received: requestedId },
       );
     }
     const identityId = workspaceIdentityId;
     if (identityId === "env") {
-      throw new ApiError(400, "invalid_identity", "Identity id 'env' is reserved");
+      throw apiError(400, "invalid_identity", tr("identity_env_reserved"));
     }
 
     await requireApproval(ctx, {
@@ -1831,7 +1834,7 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     }
 
     if (!apply.applied) {
-      response.applyError = apply.error ?? "OpenCodeRouter did not apply the update";
+      response.applyError = apply.error ?? tr("opencode_router_update_not_applied");
       if (typeof apply.status === "number") response.applyStatus = apply.status;
     }
 
@@ -1910,21 +1913,21 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     const workspaceIdentityId = normalizeOpenCodeRouterIdentityId(workspace.id);
     const requestedId = typeof body.id === "string" ? normalizeOpenCodeRouterIdentityId(body.id) : "";
     if (requestedId && requestedId !== workspaceIdentityId) {
-      throw new ApiError(
+      throw apiError(
         400,
         "identity_mismatch",
-        `Identity id is scoped to this workspace (${workspace.id}).`,
+        tr("identity_scoped_to_workspace", { workspaceId: workspace.id }),
         { expected: workspaceIdentityId, received: requestedId },
       );
     }
     const identityId = workspaceIdentityId;
     if (identityId === "env") {
-      throw new ApiError(400, "invalid_identity", "Identity id 'env' is reserved");
+      throw apiError(400, "invalid_identity", tr("identity_env_reserved"));
     }
     const healthPort = normalizeHealthPort(body.healthPort);
     const requestHost = ctx.url.hostname;
     if (!botToken || !appToken) {
-      throw new ApiError(400, "token_required", "Slack botToken and appToken are required");
+      throw apiError(400, "token_required", tr("slack_tokens_required"));
     }
 
     await requireApproval(ctx, {
@@ -1958,7 +1961,7 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     }
 
     if (!apply.applied) {
-      response.applyError = apply.error ?? "OpenCodeRouter did not apply the update";
+      response.applyError = apply.error ?? tr("opencode_router_update_not_applied");
       if (typeof apply.status === "number") response.applyStatus = apply.status;
     }
 
@@ -1982,16 +1985,16 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     const workspaceIdentityId = normalizeOpenCodeRouterIdentityId(workspace.id);
     const requestedId = normalizeOpenCodeRouterIdentityId(ctx.params.identityId);
     if (requestedId && requestedId !== workspaceIdentityId) {
-      throw new ApiError(
+      throw apiError(
         400,
         "identity_mismatch",
-        `Identity id is scoped to this workspace (${workspace.id}).`,
+        tr("identity_scoped_to_workspace", { workspaceId: workspace.id }),
         { expected: workspaceIdentityId, received: requestedId },
       );
     }
     const identityId = workspaceIdentityId;
     if (identityId === "env") {
-      throw new ApiError(400, "invalid_identity", "Identity id 'env' is reserved");
+      throw apiError(400, "invalid_identity", tr("identity_env_reserved"));
     }
 
     await requireApproval(ctx, {
@@ -2031,7 +2034,7 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     }
 
     if (!apply.applied) {
-      response.applyError = apply.error ?? "OpenCodeRouter did not apply the update";
+      response.applyError = apply.error ?? tr("opencode_router_update_not_applied");
       if (typeof apply.status === "number") response.applyStatus = apply.status;
     }
 
@@ -2061,10 +2064,10 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     const identityIdParam = (ctx.url.searchParams.get("identityId") ?? "").trim();
     const requestedId = identityIdParam ? normalizeOpenCodeRouterIdentityId(identityIdParam) : "";
     if (requestedId && requestedId !== workspaceIdentityId) {
-      throw new ApiError(
+      throw apiError(
         400,
         "identity_mismatch",
-        `Identity id is scoped to this workspace (${workspace.id}).`,
+        tr("identity_scoped_to_workspace", { workspaceId: workspace.id }),
         { expected: workspaceIdentityId, received: requestedId },
       );
     }
@@ -2077,7 +2080,7 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     if (apply.applied && apply.body && typeof apply.body === "object") {
       return jsonResponse(apply.body);
     }
-    throw new ApiError(503, "opencodeRouter_unreachable", "OpenCodeRouter is not reachable on this host", {
+    throw apiError(503, "opencodeRouter_unreachable", tr("opencode_router_unreachable"), {
       port,
       error: apply.error,
       status: apply.status,
@@ -2094,10 +2097,10 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     const identityIdParam = typeof body.identityId === "string" ? body.identityId.trim() : "";
     const requestedId = identityIdParam ? normalizeOpenCodeRouterIdentityId(identityIdParam) : "";
     if (requestedId && requestedId !== workspaceIdentityId) {
-      throw new ApiError(
+      throw apiError(
         400,
         "identity_mismatch",
-        `Identity id is scoped to this workspace (${workspace.id}).`,
+        tr("identity_scoped_to_workspace", { workspaceId: workspace.id }),
         { expected: workspaceIdentityId, received: requestedId },
       );
     }
@@ -2108,10 +2111,10 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     const requestHost = ctx.url.hostname;
 
     if (channel !== "telegram" && channel !== "slack") {
-      throw new ApiError(400, "invalid_channel", "channel must be 'telegram' or 'slack'");
+      throw apiError(400, "invalid_channel", tr("channel_must_be_telegram_or_slack"));
     }
     if (!peerId) {
-      throw new ApiError(400, "peer_required", "peerId is required");
+      throw apiError(400, "peer_required", tr("peer_id_required"));
     }
 
     const action = directory ? "opencodeRouter.binding.set" : "opencodeRouter.binding.clear";
@@ -2135,7 +2138,7 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     };
     const apply = await tryPostOpenCodeRouterHealth("/bindings", payload, { port, requestHost, timeoutMs: 3_000 });
     if (!apply.applied) {
-      throw new ApiError(503, "opencodeRouter_unreachable", "OpenCodeRouter did not apply binding update", {
+      throw apiError(503, "opencodeRouter_unreachable", tr("opencode_router_binding_not_applied"), {
         port,
         error: apply.error,
         status: apply.status,
@@ -2175,23 +2178,23 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     const identityIdParam = typeof body.identityId === "string" ? body.identityId.trim() : "";
     const requestedId = identityIdParam ? normalizeOpenCodeRouterIdentityId(identityIdParam) : "";
     if (requestedId && requestedId !== workspaceIdentityId) {
-      throw new ApiError(
+      throw apiError(
         400,
         "identity_mismatch",
-        `Identity id is scoped to this workspace (${workspace.id}).`,
+        tr("identity_scoped_to_workspace", { workspaceId: workspace.id }),
         { expected: workspaceIdentityId, received: requestedId },
       );
     }
     const identityId = requestedId || undefined;
 
     if (channel !== "telegram" && channel !== "slack") {
-      throw new ApiError(400, "invalid_channel", "channel must be 'telegram' or 'slack'");
+      throw apiError(400, "invalid_channel", tr("channel_must_be_telegram_or_slack"));
     }
     if (!directory.trim() && !peerId) {
-      throw new ApiError(400, "directory_required", "directory is required when peerId is not provided");
+      throw apiError(400, "directory_required", tr("directory_required_when_no_peer"));
     }
     if (!text.trim()) {
-      throw new ApiError(400, "text_required", "text is required");
+      throw apiError(400, "text_required", tr("text_required"));
     }
 
     const port = healthPort ?? resolveOpenCodeRouterHealthPort();
@@ -2209,7 +2212,7 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     );
 
     if (!apply.applied) {
-      throw new ApiError(503, "opencodeRouter_unreachable", "OpenCodeRouter did not send the message", {
+      throw apiError(503, "opencodeRouter_unreachable", tr("opencode_router_send_failed"), {
         port,
         error: apply.error,
         status: apply.status,
@@ -2247,7 +2250,7 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
 
   addRoute(routes, "POST", "/workspace/:id/engine/reload", "client", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
-    throw new ApiError(410, "engine_reload_deprecated", "OpenWork-managed engine reload is disabled", {
+    throw apiError(410, "engine_reload_deprecated", tr("engine_reload_deprecated"), {
       workspaceId: workspace.id,
       guidance: "Use OpenCode hot reload instead",
     });
@@ -2266,17 +2269,17 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
   addRoute(routes, "GET", "/workspace/:id/inbox/:inboxId", "client", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
     if (!resolveInboxEnabled()) {
-      throw new ApiError(404, "inbox_disabled", "Workspace inbox is disabled");
+      throw apiError(404, "inbox_disabled", tr("workspace_inbox_disabled"));
     }
     const inboxRoot = resolveInboxDir(workspace.path);
     const relativePath = decodeInboxId(ctx.params.inboxId);
     const absPath = resolveSafeChildPath(inboxRoot, relativePath);
     if (!(await exists(absPath))) {
-      throw new ApiError(404, "inbox_item_not_found", "Inbox item not found");
+      throw apiError(404, "inbox_item_not_found", tr("inbox_item_not_found"));
     }
     const info = await stat(absPath);
     if (!info.isFile()) {
-      throw new ApiError(404, "inbox_item_not_found", "Inbox item not found");
+      throw apiError(404, "inbox_item_not_found", tr("inbox_item_not_found"));
     }
 
     const headers = new Headers();
@@ -2290,18 +2293,18 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");
     if (!resolveInboxEnabled()) {
-      throw new ApiError(404, "inbox_disabled", "Workspace inbox is disabled");
+      throw apiError(404, "inbox_disabled", tr("workspace_inbox_disabled"));
     }
     const workspace = await resolveWorkspace(config, ctx.params.id);
 
     const contentType = ctx.request.headers.get("content-type") ?? "";
     if (!contentType.toLowerCase().includes("multipart/form-data")) {
-      throw new ApiError(400, "invalid_payload", "Expected multipart/form-data");
+      throw apiError(400, "invalid_payload", tr("expected_multipart_form_data"));
     }
     const form = await ctx.request.formData();
     const file = form.get("file");
     if (!(file instanceof File)) {
-      throw new ApiError(400, "file_required", "Form field 'file' is required");
+      throw apiError(400, "file_required", tr("form_file_required"));
     }
 
     const queryPath = (ctx.url.searchParams.get("path") ?? "").trim();
@@ -2313,7 +2316,7 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     const dest = resolveSafeChildPath(inboxRoot, relativePath);
     const maxBytes = resolveInboxMaxBytes();
     if (file.size > maxBytes) {
-      throw new ApiError(413, "file_too_large", "File exceeds upload limit", { maxBytes, size: file.size });
+      throw apiError(413, "file_too_large", tr("file_exceeds_upload_limit"), { maxBytes, size: file.size });
     }
 
     await requireApproval(ctx, {
@@ -2355,17 +2358,17 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
   addRoute(routes, "GET", "/workspace/:id/artifacts/:artifactId", "client", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
     if (!resolveOutboxEnabled()) {
-      throw new ApiError(404, "outbox_disabled", "Workspace outbox is disabled");
+      throw apiError(404, "outbox_disabled", tr("workspace_outbox_disabled"));
     }
     const outboxRoot = resolveOutboxDir(workspace.path);
     const relativePath = decodeArtifactId(ctx.params.artifactId);
     const absPath = resolveSafeChildPath(outboxRoot, relativePath);
     if (!(await exists(absPath))) {
-      throw new ApiError(404, "artifact_not_found", "Artifact not found");
+      throw apiError(404, "artifact_not_found", tr("artifact_not_found"));
     }
     const info = await stat(absPath);
     if (!info.isFile()) {
-      throw new ApiError(404, "artifact_not_found", "Artifact not found");
+      throw apiError(404, "artifact_not_found", tr("artifact_not_found"));
     }
 
     const headers = new Headers();
@@ -2382,21 +2385,21 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     const lowered = relativePath.toLowerCase();
     const isMarkdown = lowered.endsWith(".md") || lowered.endsWith(".mdx") || lowered.endsWith(".markdown");
     if (!isMarkdown) {
-      throw new ApiError(400, "invalid_path", "Only markdown files are supported");
+      throw apiError(400, "invalid_path", tr("markdown_only_supported"));
     }
 
     const absPath = resolveSafeChildPath(workspace.path, relativePath);
     if (!(await exists(absPath))) {
-      throw new ApiError(404, "file_not_found", "File not found");
+      throw apiError(404, "file_not_found", tr("file_not_found"));
     }
     const info = await stat(absPath);
     if (!info.isFile()) {
-      throw new ApiError(404, "file_not_found", "File not found");
+      throw apiError(404, "file_not_found", tr("file_not_found"));
     }
 
     const maxBytes = 5_000_000;
     if (info.size > maxBytes) {
-      throw new ApiError(413, "file_too_large", "File exceeds size limit", { maxBytes, size: info.size });
+      throw apiError(413, "file_too_large", tr("file_exceeds_size_limit"), { maxBytes, size: info.size });
     }
 
     const content = await readFile(absPath, "utf8");
@@ -2414,17 +2417,17 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     const lowered = relativePath.toLowerCase();
     const isMarkdown = lowered.endsWith(".md") || lowered.endsWith(".mdx") || lowered.endsWith(".markdown");
     if (!isMarkdown) {
-      throw new ApiError(400, "invalid_path", "Only markdown files are supported");
+      throw apiError(400, "invalid_path", tr("markdown_only_supported"));
     }
 
     if (typeof body.content !== "string") {
-      throw new ApiError(400, "invalid_payload", "content must be a string");
+      throw apiError(400, "invalid_payload", tr("content_must_be_string"));
     }
     const content = body.content;
     const bytes = Buffer.byteLength(content, "utf8");
     const maxBytes = 5_000_000;
     if (bytes > maxBytes) {
-      throw new ApiError(413, "file_too_large", "File exceeds size limit", { maxBytes, size: bytes });
+      throw apiError(413, "file_too_large", tr("file_exceeds_size_limit"), { maxBytes, size: bytes });
     }
 
     const baseUpdatedAtRaw = body.baseUpdatedAt;
@@ -2436,11 +2439,11 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
 
     const before = (await exists(absPath)) ? await stat(absPath) : null;
     if (before && !before.isFile()) {
-      throw new ApiError(400, "invalid_path", "Path must point to a file");
+      throw apiError(400, "invalid_path", tr("path_must_be_file"));
     }
     const beforeUpdatedAt = before ? before.mtimeMs : null;
     if (!force && beforeUpdatedAt !== null && baseUpdatedAt !== null && beforeUpdatedAt !== baseUpdatedAt) {
-      throw new ApiError(409, "conflict", "File changed since it was loaded", {
+      throw apiError(409, "conflict", tr("file_changed_since_loaded"), {
         baseUpdatedAt,
         currentUpdatedAt: beforeUpdatedAt,
       });
@@ -2564,7 +2567,7 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const name = String(ctx.params.name ?? "").trim();
     if (!name) {
-      throw new ApiError(400, "invalid_skill_name", "Skill name is required");
+      throw apiError(400, "invalid_skill_name", tr("skill_name_required"));
     }
     const body = await readJsonBody(ctx.request);
     const overwrite = body?.overwrite === true;
@@ -2609,12 +2612,12 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     const includeGlobal = ctx.url.searchParams.get("includeGlobal") === "true";
     const name = String(ctx.params.name ?? "").trim();
     if (!name) {
-      throw new ApiError(400, "invalid_skill_name", "Skill name is required");
+      throw apiError(400, "invalid_skill_name", tr("skill_name_required"));
     }
     const items = await listSkills(workspace.path, includeGlobal);
     const item = items.find((skill) => skill.name === name);
     if (!item) {
-      throw new ApiError(404, "skill_not_found", `Skill not found: ${name}`);
+      throw apiError(404, "skill_not_found", tr("skill_not_found_named", { name }));
     }
     const content = await readFile(item.path, "utf8");
     return jsonResponse({ item, content });
@@ -2659,7 +2662,7 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const name = String(ctx.params.name ?? "").trim();
     if (!name) {
-      throw new ApiError(400, "invalid_skill_name", "Skill name is required");
+      throw apiError(400, "invalid_skill_name", tr("skill_name_required"));
     }
     await requireApproval(ctx, {
       workspaceId: workspace.id,
@@ -2700,7 +2703,7 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     const name = String(body.name ?? "");
     const configPayload = body.config as Record<string, unknown> | undefined;
     if (!configPayload) {
-      throw new ApiError(400, "invalid_payload", "MCP config is required");
+      throw apiError(400, "invalid_payload", tr("mcp_config_required"));
     }
     await requireApproval(ctx, {
       workspaceId: workspace.id,
@@ -2910,10 +2913,10 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
     const enabled = typeof body.enabled === "boolean" ? body.enabled : true;
     if (!name) {
-      throw new ApiError(400, "invalid_payload", "name is required");
+      throw apiError(400, "invalid_payload", tr("name_required"));
     }
     if (!prompt) {
-      throw new ApiError(400, "invalid_payload", "prompt is required");
+      throw apiError(400, "invalid_payload", tr("prompt_required"));
     }
 
     const schedule = parseAgentLabSchedule(body.schedule);
@@ -2985,7 +2988,7 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     const before = store.items.length;
     store.items = store.items.filter((item) => item.id !== automationId);
     if (store.items.length === before) {
-      throw new ApiError(404, "automation_not_found", "Automation not found");
+      throw apiError(404, "automation_not_found", tr("automation_not_found"));
     }
     await writeAgentLabAutomations(workspace.path, store);
     await recordAudit(workspace.path, {
@@ -3008,7 +3011,7 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     const store = await readAgentLabAutomations(workspace.path);
     const automation = store.items.find((item) => item.id === automationId);
     if (!automation) {
-      throw new ApiError(404, "automation_not_found", "Automation not found");
+      throw apiError(404, "automation_not_found", tr("automation_not_found"));
     }
 
     const now = Date.now();
@@ -3018,7 +3021,7 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     });
     const sessionId = typeof created?.id === "string" ? created.id : String(created?.id ?? "");
     if (!sessionId.trim()) {
-      throw new ApiError(502, "opencode_failed", "OpenCode session did not return an id");
+      throw apiError(502, "opencode_failed", tr("opencode_session_id_missing"));
     }
 
     await fetchOpencodeJson(workspace, `/session/${encodeURIComponent(sessionId)}/prompt_async`, {
@@ -3078,7 +3081,7 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     const logsDir = resolveAgentLabLogsDir(workspace.path);
     const abs = join(logsDir, `${automationId}.log`);
     if (!(await exists(abs))) {
-      throw new ApiError(404, "log_not_found", "Log not found");
+      throw apiError(404, "log_not_found", tr("log_not_found"));
     }
     const content = await readFile(abs, "utf8");
     return jsonResponse({ id: automationId, content });
@@ -3170,7 +3173,7 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
     const reply = body.reply === "allow" ? "allow" : "deny";
     const result = ctx.approvals.respond(ctx.params.id, reply);
     if (!result) {
-      throw new ApiError(404, "approval_not_found", "Approval request not found");
+      throw apiError(404, "approval_not_found", tr("approval_not_found"));
     }
     return jsonResponse({ ok: true, allowed: result.allowed });
   });
@@ -3181,12 +3184,12 @@ function createRoutes(config: ServerConfig, approvals: ApprovalService, tokens: 
 async function resolveWorkspace(config: ServerConfig, id: string): Promise<WorkspaceInfo> {
   const workspace = config.workspaces.find((entry) => entry.id === id);
   if (!workspace) {
-    throw new ApiError(404, "workspace_not_found", "Workspace not found");
+    throw apiError(404, "workspace_not_found", tr("workspace_not_found"));
   }
   const resolvedWorkspace = resolve(workspace.path);
   const authorized = await isAuthorizedRoot(resolvedWorkspace, config.authorizedRoots);
   if (!authorized) {
-    throw new ApiError(403, "workspace_unauthorized", "Workspace is not authorized");
+    throw apiError(403, "workspace_unauthorized", tr("workspace_unauthorized"));
   }
   return { ...workspace, path: resolvedWorkspace };
 }
@@ -3203,7 +3206,7 @@ async function isAuthorizedRoot(workspacePath: string, roots: string[]): Promise
 
 function ensureWritable(config: ServerConfig): void {
   if (config.readOnly) {
-    throw new ApiError(403, "read_only", "Server is read-only");
+    throw apiError(403, "read_only", tr("server_read_only"));
   }
 }
 
@@ -3216,10 +3219,10 @@ function scopeRank(scope: TokenScope): number {
 function requireClientScope(ctx: RequestContext, required: TokenScope): void {
   const scope = ctx.actor?.scope;
   if (!scope) {
-    throw new ApiError(401, "unauthorized", "Missing token scope");
+    throw apiError(401, "unauthorized", tr("missing_token_scope"));
   }
   if (scopeRank(scope) < scopeRank(required)) {
-    throw new ApiError(403, "forbidden", "Insufficient token scope", { required, scope });
+    throw apiError(403, "forbidden", tr("insufficient_token_scope"), { required, scope });
   }
 }
 
@@ -3228,7 +3231,7 @@ async function readJsonBody(request: Request): Promise<Record<string, unknown>> 
     const json = await request.json();
     return json as Record<string, unknown>;
   } catch {
-    throw new ApiError(400, "invalid_json", "Invalid JSON body");
+    throw apiError(400, "invalid_json", tr("invalid_json_body"));
   }
 }
 
@@ -3309,7 +3312,7 @@ async function persistWorkspaceDeletion(configPath: string, workspaceId: string,
   try {
     raw = await readFile(configPath, "utf8");
   } catch (error) {
-    throw new ApiError(500, "server_config_read_failed", "Failed to read server config", {
+    throw apiError(500, "server_config_read_failed", tr("server_config_read_failed"), {
       path: configPath,
       error: String(error),
     });
@@ -3319,7 +3322,7 @@ async function persistWorkspaceDeletion(configPath: string, workspaceId: string,
   try {
     parsed = ensurePlainObject(JSON.parse(raw)) as OpenworkServerConfigFile;
   } catch (error) {
-    throw new ApiError(422, "invalid_json", "Failed to parse server config", {
+    throw apiError(422, "invalid_json", tr("server_config_parse_failed"), {
       path: configPath,
       error: String(error),
     });
@@ -3410,7 +3413,7 @@ function generateTelegramPairingCode(): string {
     code += TELEGRAM_PAIRING_CODE_ALPHABET[randomInt(0, TELEGRAM_PAIRING_CODE_ALPHABET.length)] ?? "";
   }
   if (code.length !== 8) {
-    throw new ApiError(500, "pairing_code_generation_failed", "Failed to generate Telegram pairing code");
+    throw apiError(500, "pairing_code_generation_failed", tr("pairing_code_generation_failed"));
   }
   return `${code.slice(0, 4)}-${code.slice(4)}`;
 }
@@ -3436,7 +3439,7 @@ async function readOpenCodeRouterConfigFile(configPath: string): Promise<OpenCod
   try {
     raw = await readFile(configPath, "utf8");
   } catch (error) {
-    throw new ApiError(500, "opencodeRouter_config_read_failed", "Failed to read opencode-router.json", {
+    throw apiError(500, "opencodeRouter_config_read_failed", tr("opencode_router_config_read_failed"), {
       path: configPath,
       error: String(error),
     });
@@ -3446,7 +3449,7 @@ async function readOpenCodeRouterConfigFile(configPath: string): Promise<OpenCod
     const parsed = JSON.parse(raw) as unknown;
     return ensurePlainObject(parsed) as OpenCodeRouterConfigFile;
   } catch (error) {
-    throw new ApiError(422, "invalid_json", "Failed to parse opencode-router.json", {
+    throw apiError(422, "invalid_json", tr("opencode_router_config_parse_failed"), {
       path: configPath,
       error: String(error),
     });
@@ -3532,7 +3535,7 @@ async function persistOpenCodeRouterTelegramIdentity(identity: {
   const requestedAccess = identity.access ? normalizeTelegramAccessMode(identity.access, "public") : undefined;
   const requestedPairingCodeHash = normalizeTelegramPairingCodeHash(identity.pairingCodeHash);
   if (!token) {
-    throw new ApiError(400, "token_required", "Telegram token is required");
+    throw apiError(400, "token_required", tr("telegram_token_required"));
   }
 
   const botsRaw = (telegram as any).bots;
@@ -3556,7 +3559,7 @@ async function persistOpenCodeRouterTelegramIdentity(identity: {
       ? (requestedPairingCodeHash || existingAccessState.pairingCodeHash)
       : "";
     if (access === "private" && !pairingCodeHash) {
-      throw new ApiError(400, "pairing_code_required", "Telegram private access requires a pairing code hash");
+      throw apiError(400, "pairing_code_required", tr("telegram_pairing_code_hash_required"));
     }
     nextBots.push({
       id,
@@ -3571,7 +3574,7 @@ async function persistOpenCodeRouterTelegramIdentity(identity: {
     const access = requestedAccess ?? "public";
     const pairingCodeHash = access === "private" ? requestedPairingCodeHash : "";
     if (access === "private" && !pairingCodeHash) {
-      throw new ApiError(400, "pairing_code_required", "Telegram private access requires a pairing code hash");
+      throw apiError(400, "pairing_code_required", tr("telegram_pairing_code_hash_required"));
     }
     nextBots.push({
       id,
@@ -3809,7 +3812,7 @@ async function persistOpenCodeRouterSlackIdentity(identity: {
   const appToken = identity.appToken.trim();
   const directory = typeof identity.directory === "string" ? identity.directory.trim() : "";
   if (!botToken || !appToken) {
-    throw new ApiError(400, "token_required", "Slack botToken and appToken are required");
+    throw apiError(400, "token_required", tr("slack_tokens_required"));
   }
 
   const appsRaw = (slack as any).apps;
@@ -3982,7 +3985,7 @@ async function tryPostOpenCodeRouterHealth(
       applied: false,
       port,
       hosts: candidates,
-      error: "OpenCodeRouter health server is unavailable",
+      error: tr("opencode_router_health_unavailable"),
     }
   );
 }
@@ -4062,7 +4065,7 @@ async function tryFetchOpenCodeRouterHealth(
       applied: false,
       port,
       hosts: candidates,
-      error: "OpenCodeRouter health server is unavailable",
+      error: tr("opencode_router_health_unavailable"),
     }
   );
 }
@@ -4120,10 +4123,10 @@ async function updateOpenCodeRouterTelegramToken(
   if (!apply.applied) {
     response.applyError = (typeof response.applyError === "string" && response.applyError.trim())
       ? response.applyError
-      : apply.error ?? "OpenCodeRouter did not apply the update";
+      : apply.error ?? tr("opencode_router_update_not_applied");
     if (typeof apply.status === "number") response.applyStatus = apply.status;
   } else if (response.applied === false && !telegramStarting && !response.applyError) {
-    response.applyError = "OpenCodeRouter did not apply the update";
+    response.applyError = tr("opencode_router_update_not_applied");
   }
 
   return response;
@@ -4175,10 +4178,10 @@ async function updateOpenCodeRouterSlackTokens(
   if (!apply.applied) {
     response.applyError = (typeof response.applyError === "string" && response.applyError.trim())
       ? response.applyError
-      : apply.error ?? "OpenCodeRouter did not apply the update";
+      : apply.error ?? tr("opencode_router_update_not_applied");
     if (typeof apply.status === "number") response.applyStatus = apply.status;
   } else if (response.applied === false && !slackStarting && !response.applyError) {
-    response.applyError = "OpenCodeRouter did not apply the update";
+    response.applyError = tr("opencode_router_update_not_applied");
   }
 
   return response;
@@ -4451,7 +4454,7 @@ async function readOpenworkConfig(workspaceRoot: string): Promise<Record<string,
     const raw = await readFile(path, "utf8");
     return JSON.parse(raw) as Record<string, unknown>;
   } catch {
-    throw new ApiError(422, "invalid_json", "Failed to parse openwork.json");
+    throw apiError(422, "invalid_json", tr("openwork_json_parse_failed"));
   }
 }
 
@@ -4472,7 +4475,7 @@ function buildOpencodeReloadUrl(baseUrl: string, directory?: string | null): str
     }
     return url.toString();
   } catch {
-    throw new ApiError(400, "opencode_url_invalid", "OpenCode base URL is invalid");
+    throw apiError(400, "opencode_url_invalid", tr("opencode_base_url_invalid"));
   }
 }
 
@@ -4496,7 +4499,7 @@ function parseOpencodeErrorBody(input: string): unknown {
 async function reloadOpencodeEngine(workspace: WorkspaceInfo): Promise<void> {
   const baseUrl = workspace.baseUrl?.trim() ?? "";
   if (!baseUrl) {
-    throw new ApiError(400, "opencode_unconfigured", "OpenCode base URL is missing for this workspace");
+    throw apiError(400, "opencode_unconfigured", tr("opencode_base_url_missing"));
   }
 
   const directory = resolveOpencodeDirectory(workspace);
@@ -4508,7 +4511,7 @@ async function reloadOpencodeEngine(workspace: WorkspaceInfo): Promise<void> {
   const response = await fetch(targetUrl, { method: "POST", headers });
   if (response.ok) return;
   const body = parseOpencodeErrorBody(await response.text());
-  throw new ApiError(502, "opencode_reload_failed", "OpenCode reload failed", {
+  throw apiError(502, "opencode_reload_failed", tr("opencode_reload_failed"), {
     status: response.status,
     body,
   });
@@ -4528,7 +4531,7 @@ async function requireApproval(
   const actor = ctx.actor ?? { type: "remote" };
   const result = await ctx.approvals.requestApproval({ ...input, actor });
   if (!result.allowed) {
-    throw new ApiError(403, "write_denied", "Write request denied", {
+    throw apiError(403, "write_denied", tr("write_request_denied"), {
       requestId: result.id,
       reason: result.reason,
     });
@@ -4607,7 +4610,7 @@ async function importWorkspace(workspace: WorkspaceInfo, payload: Record<string,
         const name = command.name || (typeof parsed.data.name === "string" ? parsed.data.name : "");
         const description = command.description || (typeof parsed.data.description === "string" ? parsed.data.description : undefined);
         if (!name) {
-          throw new ApiError(400, "invalid_command", "Command name is required");
+          throw apiError(400, "invalid_command", tr("command_name_required"));
         }
         const template = parsed.body.trim();
         await upsertCommand(workspace.path, {

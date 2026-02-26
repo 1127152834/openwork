@@ -17,6 +17,7 @@ import type {
 import { addOpencodeCacheHint, isTauriRuntime, safeStringify } from "./utils";
 import { mapConfigProvidersToList } from "./utils/providers";
 import { createUpdaterState } from "./context/updater";
+import { currentLocale, t } from "../i18n";
 import {
   resetOpenworkState,
   resetOpencodeCache,
@@ -48,6 +49,15 @@ export function createSystemState(options: {
   setError: (value: string | null) => void;
   notion?: NotionState;
 }) {
+  const translate = (key: string) => t(key, currentLocale());
+  const translateWithVars = (key: string, vars: Record<string, string | number>) => {
+    let text = translate(key);
+    for (const [name, value] of Object.entries(vars)) {
+      text = text.replaceAll(`{${name}}`, String(value));
+    }
+    return text;
+  };
+
   const [reloadRequired, setReloadRequired] = createSignal(false);
   const [reloadReasons, setReloadReasons] = createSignal<ReloadReason[]>([]);
   const [reloadLastTriggeredAt, setReloadLastTriggeredAt] = createSignal<number | null>(null);
@@ -106,7 +116,7 @@ export function createSystemState(options: {
 
   function openResetModal(mode: ResetOpenworkMode) {
     if (anyActiveRuns()) {
-      options.setError("Stop active runs before resetting.");
+      options.setError(translate("settings.reset_stop_active_runs"));
       return;
     }
 
@@ -120,7 +130,7 @@ export function createSystemState(options: {
     if (resetModalBusy()) return;
 
     if (anyActiveRuns()) {
-      options.setError("Stop active runs before resetting.");
+      options.setError(translate("settings.reset_stop_active_runs"));
       return;
     }
 
@@ -181,56 +191,56 @@ export function createSystemState(options: {
     const reasons = reloadReasons();
     if (!reasons.length) {
       return {
-        title: "Reload required",
-        body: "OpenWork detected changes that require reloading the OpenCode instance.",
+        title: translate("settings.reload_required"),
+        body: translate("system_state.reload_body_general"),
       };
     }
 
     if (reasons.length === 1 && reasons[0] === "plugins") {
       return {
-        title: "Reload required",
-        body: "OpenCode loads npm plugins at startup. Reload the engine to apply opencode.json changes.",
+        title: translate("settings.reload_required"),
+        body: translate("system_state.reload_body_plugins"),
       };
     }
 
     if (reasons.length === 1 && reasons[0] === "skills") {
       return {
-        title: "Reload required",
-        body: "OpenCode can cache skill discovery/state. Reload the engine to make newly installed skills available.",
+        title: translate("settings.reload_required"),
+        body: translate("system_state.reload_body_skills"),
       };
     }
 
     if (reasons.length === 1 && reasons[0] === "agents") {
       return {
-        title: "Reload required",
-        body: "OpenCode loads agents at startup. Reload the engine to make updated agents available.",
+        title: translate("settings.reload_required"),
+        body: translate("system_state.reload_body_agents"),
       };
     }
 
     if (reasons.length === 1 && reasons[0] === "commands") {
       return {
-        title: "Reload required",
-        body: "OpenCode loads commands at startup. Reload the engine to make updated commands available.",
+        title: translate("settings.reload_required"),
+        body: translate("system_state.reload_body_commands"),
       };
     }
 
     if (reasons.length === 1 && reasons[0] === "config") {
       return {
-        title: "Reload required",
-        body: "OpenCode reads opencode.json at startup. Reload the engine to apply configuration changes.",
+        title: translate("settings.reload_required"),
+        body: translate("system_state.reload_body_config"),
       };
     }
 
     if (reasons.length === 1 && reasons[0] === "mcp") {
       return {
-        title: "Reload required",
-        body: "OpenCode loads MCP servers at startup. Reload the engine to activate the new connection.",
+        title: translate("settings.reload_required"),
+        body: translate("system_state.reload_body_mcp"),
       };
     }
 
     return {
-      title: "Reload required",
-      body: "OpenWork detected OpenCode configuration changes. Reload the engine to apply them.",
+      title: translate("settings.reload_required"),
+      body: translate("system_state.reload_body_multiple"),
     };
   });
 
@@ -255,14 +265,9 @@ export function createSystemState(options: {
 
     const override = options.canReloadWorkspaceEngine?.();
     if (override === false) {
-      setReloadError("Reload is unavailable for this worker.");
+      setReloadError(translate("system_state.reload_unavailable_for_worker"));
       return;
     }
-
-    // if (anyActiveRuns()) {
-    //   setReloadError("Waiting for active tasks to complete before reloading.");
-    //   return;
-    // }
 
     setReloadBusy(true);
     setReloadError(null);
@@ -271,7 +276,7 @@ export function createSystemState(options: {
       if (options.reloadWorkspaceEngine) {
         const ok = await options.reloadWorkspaceEngine();
         if (ok === false) {
-          setReloadError("Failed to reload the engine.");
+          setReloadError(translate("system_state.reload_failed"));
           return;
         }
       } else {
@@ -280,7 +285,7 @@ export function createSystemState(options: {
 
       const nextClient = options.client();
       if (!nextClient) {
-        throw new Error("OpenCode client unavailable after reload.");
+        throw new Error(translate("system_state.client_unavailable_after_reload"));
       }
 
       await waitForHealthy(nextClient, { timeoutMs: 12_000 });
@@ -312,13 +317,13 @@ export function createSystemState(options: {
         if (nextStatus === "connecting") {
           nextStatus = "connected";
           options.notion.setStatus(nextStatus);
-          options.notion.setStatusDetail("Worker connected");
+          options.notion.setStatusDetail(translate("system_state.worker_connected"));
         }
 
         if (nextStatus === "connected") {
           const detail = options.notion.statusDetail();
           if (!detail || detail.toLowerCase().includes("reload")) {
-            options.notion.setStatusDetail("Worker connected");
+            options.notion.setStatusDetail(translate("system_state.worker_connected"));
           }
         }
 
@@ -355,7 +360,7 @@ export function createSystemState(options: {
 
   async function repairOpencodeCache() {
     if (!isTauriRuntime()) {
-      setCacheRepairResult("Cache repair requires the desktop app.");
+      setCacheRepairResult(translate("settings.cache_repair_requires_desktop"));
       return;
     }
 
@@ -373,9 +378,9 @@ export function createSystemState(options: {
       }
 
       if (result.removed.length) {
-        setCacheRepairResult("OpenCode cache repaired. Restart the engine if it was running.");
+        setCacheRepairResult(translate("system_state.cache_repaired"));
       } else {
-        setCacheRepairResult("No OpenCode cache found. Nothing to repair.");
+        setCacheRepairResult(translate("system_state.cache_not_found"));
       }
     } catch (e) {
       setCacheRepairResult(e instanceof Error ? e.message : safeStringify(e));
@@ -386,7 +391,7 @@ export function createSystemState(options: {
 
   async function cleanupOpenworkDockerContainers() {
     if (!isTauriRuntime()) {
-      setDockerCleanupResult("Docker cleanup requires the desktop app.");
+      setDockerCleanupResult(translate("settings.docker_cleanup_requires_desktop"));
       return;
     }
 
@@ -399,7 +404,7 @@ export function createSystemState(options: {
     try {
       const result = await sandboxCleanupOpenworkContainers();
       if (!result.candidates.length) {
-        setDockerCleanupResult("No OpenWork Docker containers found.");
+        setDockerCleanupResult(translate("system_state.no_openwork_docker_containers"));
         return;
       }
 
@@ -407,12 +412,16 @@ export function createSystemState(options: {
       if (result.errors.length) {
         const first = result.errors[0];
         setDockerCleanupResult(
-          `Removed ${removedCount}/${result.candidates.length} containers. ${first}`,
+          translateWithVars("system_state.docker_cleanup_partial", {
+            removed: removedCount,
+            total: result.candidates.length,
+            error: first,
+          }),
         );
         return;
       }
 
-      setDockerCleanupResult(`Removed ${removedCount} OpenWork Docker container(s).`);
+      setDockerCleanupResult(translateWithVars("system_state.docker_cleanup_success", { removed: removedCount }));
     } catch (e) {
       setDockerCleanupResult(e instanceof Error ? e.message : safeStringify(e));
     } finally {
@@ -432,7 +441,7 @@ export function createSystemState(options: {
             updateStatus().state === "idle"
               ? (updateStatus() as { state: "idle"; lastCheckedAt: number | null }).lastCheckedAt
               : null,
-          message: env.reason ?? "Updates are not supported in this environment.",
+          message: env.reason ?? translate("settings.update_not_supported"),
         });
       }
       return;
@@ -555,7 +564,7 @@ export function createSystemState(options: {
     if (!pending) return;
 
     if (anyActiveRuns()) {
-      options.setError("Stop active runs before installing an update.");
+      options.setError(translate("settings.stop_runs_to_update"));
       return;
     }
 

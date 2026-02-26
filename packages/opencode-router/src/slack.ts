@@ -4,6 +4,7 @@ import { SocketModeClient } from "@slack/socket-mode";
 import { WebClient } from "@slack/web-api";
 
 import type { Config, SlackIdentity } from "./config.js";
+import { resolveRouterLangFromEnv, routerText } from "./i18n.js";
 
 export type InboundMessage = {
   channel: "slack";
@@ -81,13 +82,14 @@ export function createSlackAdapter(
   onMessage: MessageHandler,
   deps: SlackDeps = { WebClient, SocketModeClient },
 ): SlackAdapter {
+  const lang = resolveRouterLangFromEnv();
   const botToken = identity.botToken?.trim() ?? "";
   const appToken = identity.appToken?.trim() ?? "";
   if (!botToken) {
-    throw new Error("Slack bot token is required for Slack adapter");
+    throw new Error(routerText("slack_tokens_required", lang));
   }
   if (!appToken) {
-    throw new Error("Slack app token is required for Slack adapter");
+    throw new Error(routerText("slack_tokens_required", lang));
   }
 
   const log = logger.child({ channel: "slack", identityId: identity.id });
@@ -206,7 +208,7 @@ export function createSlackAdapter(
     },
     async sendText(peerId: string, text: string) {
       const peer = parseSlackPeerId(peerId);
-      if (!peer.channelId) throw new Error("Invalid Slack peerId");
+      if (!peer.channelId) throw new Error(routerText("peer_required", lang));
 
       const payload: Record<string, unknown> = {
         channel: peer.channelId,

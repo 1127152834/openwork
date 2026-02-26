@@ -14,10 +14,6 @@ const nextConfig = {
         destination: `${mintlifyOrigin}/_mintlify/api/request`,
       },
       {
-        source: "/docs",
-        destination: `${mintlifyOrigin}/`,
-      },
-      {
         source: "/docs/get-started",
         destination: `${mintlifyOrigin}/quickstart`,
       },
@@ -58,10 +54,6 @@ const nextConfig = {
       {
         source: "/development",
         destination: `${mintlifyOrigin}/development`,
-      },
-      {
-        source: "/openwork",
-        destination: `${mintlifyOrigin}/openwork`,
       },
       {
         source: "/opencode-router",

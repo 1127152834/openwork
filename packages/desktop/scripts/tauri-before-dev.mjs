@@ -6,7 +6,7 @@ const pnpmCmd = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 
 const readPort = () => {
   const value = Number.parseInt(process.env.PORT ?? "", 10);
-  return Number.isFinite(value) && value > 0 ? value : 5173;
+  return Number.isFinite(value) && value > 0 ? value : 5273;
 };
 
 const hostOverride = process.env.OPENWORK_DEV_HOST?.trim() || null;
@@ -183,7 +183,7 @@ const main = async () => {
   if (portInUse) {
     console.error(
       `[openwork] Port ${port} is in use, but it does not look like a Vite dev server.\n` +
-        `Set PORT to a free port (e.g. PORT=5174) or stop the process using port ${port}.`
+        `Set PORT to a free port (e.g. PORT=5274) or stop the process using port ${port}.`
     );
     process.exit(1);
   }

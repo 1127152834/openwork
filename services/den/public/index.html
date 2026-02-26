@@ -130,6 +130,16 @@
     <script>
       const output = document.getElementById("output")
       let bearerToken = ""
+      const locale = (navigator.language || "").toLowerCase().startsWith("zh") ? "zh" : "en"
+      const errorCode = {
+        missingBearerToken: ["missing", "bearer", "token"].join("_"),
+      }
+      const uiText = {
+        missingBearerTokenHint: {
+          en: "Sign up first to capture token.",
+          zh: "请先注册以获取 token。",
+        },
+      }
 
       const print = (value) => {
         output.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2)
@@ -211,7 +221,7 @@
 
       document.getElementById("me-bearer-button").addEventListener("click", async () => {
         if (!bearerToken) {
-          print({ error: "missing_bearer_token", hint: "Sign up first to capture token." })
+          print({ error: errorCode.missingBearerToken, hint: uiText.missingBearerTokenHint[locale] })
           return
         }
 

@@ -21,6 +21,7 @@ import { unwrap } from "../lib/opencode";
 import { safeStringify } from "../utils";
 import { mapConfigProvidersToList } from "../utils/providers";
 import { useGlobalSDK } from "./global-sdk";
+import { currentLocale, t } from "../../i18n";
 
 export type WorkspaceState = {
   status: "idle" | "loading" | "partial" | "ready";
@@ -72,6 +73,7 @@ const createWorkspaceState = (): WorkspaceState => ({
 });
 
 export function GlobalSyncProvider(props: ParentProps) {
+  const translate = (key: string) => t(key, currentLocale());
   const globalSDK = useGlobalSDK();
   const defaultProvider: ProviderListResponse = { all: [], connected: [], default: {} };
   const [globalStore, setGlobalStore] = createStore<GlobalState>({
@@ -94,7 +96,7 @@ export function GlobalSyncProvider(props: ParentProps) {
 
   const setError = (error: unknown) => {
     const message = error instanceof Error ? error.message : safeStringify(error);
-    setGlobalStore("error", message || "Unknown error");
+    setGlobalStore("error", message || translate("global_sync.unknown_error"));
   };
 
   const setProjectMeta = (projects: Project[]) => {
@@ -184,7 +186,7 @@ export function GlobalSyncProvider(props: ParentProps) {
     try {
       const health = unwrap(await globalSDK.client().global.health()) as GlobalHealthResponse;
       if (!health?.healthy) {
-        setGlobalStore("error", "Server reported unhealthy status.");
+        setGlobalStore("error", translate("global_sync.server_unhealthy"));
         return;
       }
 
@@ -277,7 +279,7 @@ export function GlobalSyncProvider(props: ParentProps) {
 export function useGlobalSync() {
   const context = useContext(GlobalSyncContext);
   if (!context) {
-    throw new Error("Global sync context is missing");
+    throw new Error(t("global_sync.context_missing", currentLocale()));
   }
   return context;
 }

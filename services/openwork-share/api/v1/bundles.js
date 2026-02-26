@@ -1,6 +1,14 @@
 import { put } from "@vercel/blob";
 import { ulid } from "ulid";
 
+const RESP_MSG = {
+  methodNotAllowed: "Method not allowed",
+  expectedJson: "Expected application/json",
+  bodyRequired: "Body is required",
+  bundleTooLarge: "Bundle exceeds upload limit",
+  invalidJson: "Invalid JSON",
+};
+
 function getEnv(name, fallback = "") {
   const value = process.env[name];
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
@@ -36,7 +44,7 @@ export default async function handler(req, res) {
     return;
   }
   if (req.method !== "POST") {
-    res.status(405).json({ message: "Method not allowed" });
+    res.status(405).json({ message: RESP_MSG.methodNotAllowed });
     return;
   }
 
@@ -45,17 +53,17 @@ export default async function handler(req, res) {
 
   const contentType = String(req.headers["content-type"] ?? "").toLowerCase();
   if (!contentType.includes("application/json")) {
-    res.status(415).json({ message: "Expected application/json" });
+    res.status(415).json({ message: RESP_MSG.expectedJson });
     return;
   }
 
   const raw = await readBody(req);
   if (!raw || raw.length === 0) {
-    res.status(400).json({ message: "Body is required" });
+    res.status(400).json({ message: RESP_MSG.bodyRequired });
     return;
   }
   if (raw.length > maxBytes) {
-    res.status(413).json({ message: "Bundle exceeds upload limit", maxBytes });
+    res.status(413).json({ message: RESP_MSG.bundleTooLarge, maxBytes });
     return;
   }
 
@@ -63,7 +71,7 @@ export default async function handler(req, res) {
   try {
     JSON.parse(raw.toString("utf8"));
   } catch {
-    res.status(422).json({ message: "Invalid JSON" });
+    res.status(422).json({ message: RESP_MSG.invalidJson });
     return;
   }
 

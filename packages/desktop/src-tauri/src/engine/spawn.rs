@@ -22,7 +22,7 @@ pub fn build_engine_args(bind_host: &str, port: u16) -> Vec<String> {
         "--port".to_string(),
         port.to_string(),
         // Allow all origins since the engine may be accessed remotely from client
-        // devices or from the dev UI running on localhost:5173.
+        // devices or from the dev UI running on localhost:5273.
         "--cors".to_string(),
         "*".to_string(),
     ]

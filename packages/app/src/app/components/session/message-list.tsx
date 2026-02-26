@@ -7,6 +7,7 @@ import type { MessageGroup, MessageWithParts } from "../../types";
 import { groupMessageParts, summarizeStep } from "../../utils";
 import PartView from "../part-view";
 import { perfNow, recordPerfLog } from "../../lib/perf-log";
+import { currentLocale, t } from "../../../i18n";
 
 export type MessageListProps = {
   messages: MessageWithParts[];
@@ -137,6 +138,14 @@ function getTaskStepInfo(part: Part): TaskStepInfo {
 }
 
 export default function MessageList(props: MessageListProps) {
+  const translate = (key: string) => t(key, currentLocale());
+  const translateWithVars = (key: string, vars: Record<string, string | number>) => {
+    let message = translate(key);
+    for (const [varName, value] of Object.entries(vars)) {
+      message = message.replace(new RegExp(`\\{${varName}\\}`, "g"), String(value));
+    }
+    return message;
+  };
   const [copyingId, setCopyingId] = createSignal<string | null>(null);
   let previousMessagePartCountById = new Map<string, number>();
   let copyTimeout: number | undefined;
@@ -244,6 +253,7 @@ export default function MessageList(props: MessageListProps) {
     props.messages.forEach((message, index) => {
       const renderableParts = renderablePartsForMessage(message);
       if (!renderableParts.length) return;
+      const contentParts = renderableParts.filter((part) => !isAttachmentPart(part));
 
       const messageId = String((message.info as any).id ?? "");
       const idKey = messageId || `idx:${index}`;
@@ -258,7 +268,7 @@ export default function MessageList(props: MessageListProps) {
 
       toolPartCount += renderableParts.reduce((count, part) => (part.type === "tool" ? count + 1 : count), 0);
       const groupId = String((message.info as any).id ?? "message");
-      const groups = groupMessageParts(renderableParts, groupId);
+      const groups = groupMessageParts(contentParts, groupId);
       const isUser = (message.info as any).role === "user";
       const isStepsOnly = groups.length > 0 && groups.every((group) => group.kind === "steps");
       const stepGroups = isStepsOnly ? (groups as { kind: "steps"; id: string; parts: Part[]; segment: "execution" }[]) : [];
@@ -383,12 +393,12 @@ export default function MessageList(props: MessageListProps) {
         {/* Skill badge */}
         <Show when={summary().isSkill}>
           <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-3 text-purple-11 shrink-0">
-            skill
+            {translate("message_list.badge_skill")}
           </span>
         </Show>
         <Show when={task().isTask}>
           <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-3 text-blue-11 shrink-0">
-            subagent
+            {translate("message_list.badge_subagent")}
           </span>
         </Show>
         {/* Detail - truncated to single line */}
@@ -400,7 +410,7 @@ export default function MessageList(props: MessageListProps) {
         <Show when={task().agentType && !summary().detail}>
           {(agentType) => (
             <span class="text-[12px] text-gray-9 truncate min-w-0">
-              {agentType()} agent
+              {translateWithVars("message_list.agent_suffix", { agent: String(agentType()) })}
             </span>
           )}
         </Show>
@@ -416,7 +426,7 @@ export default function MessageList(props: MessageListProps) {
               props.openSessionById?.(sessionId);
             }}
           >
-            open
+            {translate("message_list.open")}
           </button>
         </Show>
       </div>
@@ -472,16 +482,21 @@ export default function MessageList(props: MessageListProps) {
     const executionSummary = () => {
       const tools = toolCallCount();
       const reasoning = reasoningCount();
+      const stepsText = translateWithVars("message_list.steps_count", { count: tools, suffix: tools === 1 ? "" : "s" });
+      const thoughtsText = translateWithVars("message_list.thought_updates_count", { count: reasoning, suffix: reasoning === 1 ? "" : "s" });
       if (tools > 0 && reasoning > 0) {
-        return `${tools} step${tools === 1 ? "" : "s"} with ${reasoning} thought update${reasoning === 1 ? "" : "s"}`;
+        return translateWithVars("message_list.steps_with_thought_updates", {
+          steps: stepsText,
+          thoughts: thoughtsText,
+        });
       }
       if (tools > 0) {
-        return `${tools} step${tools === 1 ? "" : "s"}`;
+        return stepsText;
       }
       if (reasoning > 0) {
-        return `${reasoning} thought update${reasoning === 1 ? "" : "s"}`;
+        return thoughtsText;
       }
-      return "updates";
+      return translate("message_list.updates");
     };
 
     const compactPathToken = (value: string) => {
@@ -528,49 +543,53 @@ export default function MessageList(props: MessageListProps) {
         const description = pick("description");
         if (description) return compactText(description);
         const command = pick("command", "cmd");
-        return command ? compactText(`Run ${command}`, 48) : "Run command";
+        return command
+          ? compactText(translateWithVars("message_list.tool_run_command_target", { command }), 48)
+          : translate("message_list.tool_run_command");
       }
 
       if (tool === "read") {
         const file = target("filePath", "path", "file");
-        return file ? `Read ${file}` : "Read file";
+        return file ? translateWithVars("message_list.tool_read_target", { target: file }) : translate("message_list.tool_read_file");
       }
 
       if (tool === "edit") {
         const file = target("filePath", "path", "file");
-        return file ? `Edit ${file}` : "Edit file";
+        return file ? translateWithVars("message_list.tool_edit_target", { target: file }) : translate("message_list.tool_edit_file");
       }
 
       if (tool === "write" || tool === "apply_patch") {
         const file = target("filePath", "path", "file");
-        return file ? `Update ${file}` : "Update file";
+        return file ? translateWithVars("message_list.tool_update_target", { target: file }) : translate("message_list.tool_update_file");
       }
 
       if (tool === "grep" || tool === "glob") {
         const pattern = pick("pattern", "query");
-        return pattern ? `Search ${compactText(pattern, 36)}` : "Search code";
+        return pattern
+          ? translateWithVars("message_list.tool_search_pattern", { pattern: compactText(pattern, 36) })
+          : translate("message_list.tool_search_code");
       }
 
       if (tool === "list") {
         const path = target("path");
-        return path ? `List ${path}` : "List files";
+        return path ? translateWithVars("message_list.tool_list_target", { target: path }) : translate("message_list.tool_list_files");
       }
 
       if (tool === "task") {
         const description = pick("description");
         if (description) return compactText(description);
         const agent = pick("subagent_type");
-        return agent ? `Delegate ${agent}` : "Delegate task";
+        return agent ? translateWithVars("message_list.tool_delegate_agent", { agent }) : translate("message_list.tool_delegate_task");
       }
 
       if (tool === "webfetch") {
         const url = pick("url");
-        return url ? `Fetch ${compactText(url, 36)}` : "Fetch web page";
+        return url ? translateWithVars("message_list.tool_fetch_url", { url: compactText(url, 36) }) : translate("message_list.tool_fetch_web_page");
       }
 
       if (tool === "skill") {
         const name = pick("name");
-        return name ? `Load skill ${name}` : "Load skill";
+        return name ? translateWithVars("message_list.tool_load_skill_name", { name }) : translate("message_list.tool_load_skill");
       }
 
       return "";
@@ -578,7 +597,7 @@ export default function MessageList(props: MessageListProps) {
 
     const latestStepLabel = () => {
       const step = latestStep();
-      if (!step) return "Last step";
+      if (!step) return translate("message_list.last_step");
 
       const fromTool = toolHeadline(step);
       if (fromTool) return compactText(fromTool);
@@ -599,7 +618,7 @@ export default function MessageList(props: MessageListProps) {
       if (title && !generic) return title;
       if (detail) return isPathLike(detail) ? compactPathToken(detail) : detail;
       if (title) return title;
-      return "Last step";
+      return translate("message_list.last_step");
     };
     const hasRunning = () =>
       containerProps.partsGroups.some((parts) =>
@@ -630,7 +649,7 @@ export default function MessageList(props: MessageListProps) {
               <span class="inline-flex h-1 w-1 rounded-full bg-blue-10/70 animate-pulse" />
             </Show>
             <span class="truncate max-w-[58ch]">
-              {expanded() ? "Hide timeline" : "Execution timeline"}
+              {expanded() ? translate("message_list.hide_timeline") : translate("message_list.execution_timeline")}
             </span>
           </span>
           <Show when={!expanded()}>
@@ -789,7 +808,7 @@ export default function MessageList(props: MessageListProps) {
                 <div class="absolute bottom-2 right-2 flex justify-end opacity-100 pointer-events-auto md:opacity-0 md:pointer-events-none md:group-hover:opacity-100 md:group-hover:pointer-events-auto md:group-focus-within:opacity-100 md:group-focus-within:pointer-events-auto transition-opacity select-none">
                   <button
                     class="text-dls-secondary hover:text-dls-text p-1 rounded hover:bg-dls-hover transition-colors"
-                    title="Copy message"
+                    title={translate("message_list.copy_message")}
                     onClick={() => {
                       const text = block.renderableParts
                         .map((part) => partToText(part))

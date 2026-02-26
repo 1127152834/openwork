@@ -4,9 +4,10 @@ import { join, resolve } from "node:path";
 import { homedir } from "node:os";
 import type { SkillItem } from "./types.js";
 import { parseFrontmatter, buildFrontmatter } from "./frontmatter.js";
+import { apiError } from "./errors.js";
+import { tr } from "./i18n.js";
 import { exists } from "./utils.js";
 import { validateDescription, validateSkillName } from "./validators.js";
-import { ApiError } from "./errors.js";
 import { projectSkillsDir } from "./workspace-files.js";
 
 async function findWorkspaceRoots(workspaceRoot: string): Promise<string[]> {
@@ -148,7 +149,7 @@ export async function upsertSkill(
   const name = payload.name.trim();
   validateSkillName(name);
   if (!payload.content) {
-    throw new ApiError(400, "invalid_skill_content", "Skill content is required");
+    throw apiError(400, "invalid_skill_content", tr("skill_content_required"));
   }
 
   let content = payload.content;
@@ -157,7 +158,7 @@ export async function upsertSkill(
     const frontmatterName = typeof data.name === "string" ? data.name : "";
     const frontmatterDescription = typeof data.description === "string" ? data.description : "";
     if (frontmatterName && frontmatterName !== name) {
-      throw new ApiError(400, "invalid_skill_name", "Skill frontmatter name must match payload name");
+      throw apiError(400, "invalid_skill_name", tr("skill_frontmatter_name_mismatch"));
     }
     validateDescription(frontmatterDescription || payload.description);
     const nextDescription = frontmatterDescription || payload.description || "";
@@ -189,7 +190,7 @@ export async function deleteSkill(workspaceRoot: string, name: string): Promise<
   const skillDir = join(baseDir, trimmed);
   const skillPath = join(skillDir, "SKILL.md");
   if (!(await exists(skillPath))) {
-    throw new ApiError(404, "skill_not_found", `Skill not found: ${trimmed}`);
+    throw apiError(404, "skill_not_found", tr("skill_not_found_named", { name: trimmed }));
   }
   await rm(skillDir, { recursive: true, force: true });
   return { path: skillDir };

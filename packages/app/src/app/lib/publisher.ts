@@ -1,3 +1,5 @@
+import { t, currentLocale } from "../../i18n";
+
 export type OpenworkPublisherBundleType = "skill" | "workspace-profile" | "skills-set";
 
 export type PublishBundleResult = {
@@ -9,7 +11,7 @@ export const DEFAULT_OPENWORK_PUBLISHER_BASE_URL = "https://share.openwork.softw
 function normalizeBaseUrl(input: string): string {
   const trimmed = String(input ?? "").trim();
   if (!trimmed) {
-    throw new Error("Publisher baseUrl is required");
+    throw new Error(t("publisher.base_url_required", currentLocale()));
   }
   return trimmed.replace(/\/+$/, "");
 }
@@ -62,13 +64,15 @@ export async function publishOpenworkBundleJson(input: {
     if (!response.ok) {
       const details = await readErrorMessage(response);
       const suffix = details ? `: ${details}` : "";
-      throw new Error(`Publish failed (${response.status})${suffix}`);
+      throw new Error(
+        t("publisher.publish_failed", currentLocale()).replace("{status}", String(response.status)) + suffix,
+      );
     }
 
     const json = (await response.json()) as Record<string, unknown>;
     const url = typeof json.url === "string" ? json.url.trim() : "";
     if (!url) {
-      throw new Error("Publisher response missing url");
+      throw new Error(t("publisher.response_missing_url", currentLocale()));
     }
     return { url };
   } finally {

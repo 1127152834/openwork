@@ -1,6 +1,7 @@
 import { createContext, useContext, type ParentProps } from "solid-js";
 import type { SetStoreFunction, Store } from "solid-js/store";
 
+import { t, currentLocale } from "../../i18n";
 import { useGlobalSync, type WorkspaceState } from "./global-sync";
 
 type SyncContextValue = {
@@ -27,7 +28,7 @@ export function SyncProvider(props: ParentProps & { directory: string }) {
 export function useSync() {
   const context = useContext(SyncContext);
   if (!context) {
-    throw new Error("Sync context is missing");
+    throw new Error(t("sync.context_missing", currentLocale()));
   }
   return context;
 }

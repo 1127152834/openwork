@@ -1,7 +1,8 @@
 import { createSignal, createRoot } from "solid-js";
 import en from "./locales/en";
 import zh from "./locales/zh";
-import { LANGUAGE_PREF_KEY } from "../app/constants";
+
+const LANGUAGE_PREF_KEY = "openwork.language";
 
 /**
  * Supported languages - only en and zh for initial PR
@@ -38,10 +39,47 @@ export const isLanguage = (value: unknown): value is Language => {
   return typeof value === "string" && LANGUAGES.includes(value as Language);
 };
 
+const detectSystemLocale = (): Language => {
+  if (typeof navigator === "undefined") {
+    return "en";
+  }
+
+  const preferredLocales = [
+    ...(Array.isArray(navigator.languages) ? navigator.languages : []),
+    navigator.language,
+  ];
+
+  for (const locale of preferredLocales) {
+    if (typeof locale !== "string" || !locale.trim()) continue;
+    const normalized = locale.toLowerCase();
+    if (normalized.startsWith("zh")) return "zh";
+    if (normalized.startsWith("en")) return "en";
+  }
+
+  return "en";
+};
+
+const detectInitialLocale = (): Language => {
+  if (typeof window === "undefined") {
+    return "en";
+  }
+
+  try {
+    const stored = window.localStorage.getItem(LANGUAGE_PREF_KEY);
+    if (isLanguage(stored)) {
+      return stored;
+    }
+  } catch (e) {
+    console.warn("Failed to read language preference:", e);
+  }
+
+  return detectSystemLocale();
+};
+
 /**
  * Create root-level locale signal with persistence
  */
-const [locale, setLocaleSignal] = createRoot(() => createSignal<Language>("en"));
+const [locale, setLocaleSignal] = createRoot(() => createSignal<Language>(detectInitialLocale()));
 
 /**
  * Get current locale
@@ -113,5 +151,7 @@ export const initLocale = (): Language => {
     console.warn("Failed to read language preference:", e);
   }
 
-  return "en";
+  const systemLocale = detectSystemLocale();
+  setLocaleSignal(systemLocale);
+  return systemLocale;
 };

@@ -1,6 +1,7 @@
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { isTauriRuntime } from "../utils";
 import type { ScheduledJob } from "./tauri";
+import { currentLocale, t } from "../../i18n";
 
 export type OpenworkServerCapabilities = {
   skills: { read: boolean; write: boolean; source: "openwork" | "opencode" };
@@ -907,6 +908,7 @@ function buildAuthHeaders(token?: string, hostToken?: string, extra?: Record<str
 const resolveFetch = () => (isTauriRuntime() ? tauriFetch : globalThis.fetch);
 
 const DEFAULT_OPENWORK_SERVER_TIMEOUT_MS = 10_000;
+const translate = (key: string) => t(key, currentLocale());
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -932,7 +934,7 @@ async function fetchWithTimeout(
       } catch {
         // ignore
       }
-      reject(new Error("Request timed out."));
+      reject(new Error(translate("openwork_server.request_timed_out")));
     }, timeoutMs);
   });
 
@@ -941,7 +943,7 @@ async function fetchWithTimeout(
   } catch (error) {
     const name = (error && typeof error === "object" && "name" in error ? (error as any).name : "") as string;
     if (name === "AbortError") {
-      throw new Error("Request timed out.");
+      throw new Error(translate("openwork_server.request_timed_out"));
     }
     throw error;
   } finally {
@@ -1523,8 +1525,8 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
 
     uploadInbox: async (workspaceId: string, file: File, options?: { path?: string }) => {
       const id = workspaceId.trim();
-      if (!id) throw new Error("workspaceId is required");
-      if (!file) throw new Error("file is required");
+      if (!id) throw new Error(translate("openwork_server.workspace_id_required"));
+      if (!file) throw new Error(translate("openwork_server.file_required"));
       const form = new FormData();
       form.append("file", file);
       if (options?.path?.trim()) {

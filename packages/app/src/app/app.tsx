@@ -248,7 +248,7 @@ function readSkillItem(value: unknown): SharedSkillItem | null {
 function parseSharedBundle(value: unknown): SharedBundleV1 {
   const record = readRecord(value);
   if (!record) {
-    throw new Error("Invalid shared bundle payload.");
+    throw new Error(t("app.shared_bundle_invalid_payload", currentLocale()));
   }
 
   const schemaVersion = typeof record.schemaVersion === "number" ? record.schemaVersion : null;
@@ -256,13 +256,13 @@ function parseSharedBundle(value: unknown): SharedBundleV1 {
   const name = typeof record.name === "string" ? record.name.trim() : "";
 
   if (schemaVersion !== 1) {
-    throw new Error("Unsupported bundle schema version.");
+    throw new Error(t("app.shared_bundle_unsupported_schema", currentLocale()));
   }
 
   if (type === "skill") {
     const content = typeof record.content === "string" ? record.content : "";
     if (!name || !content) {
-      throw new Error("Invalid skill bundle payload.");
+      throw new Error(t("app.shared_bundle_invalid_skill_payload", currentLocale()));
     }
     return {
       schemaVersion: 1,
@@ -279,12 +279,12 @@ function parseSharedBundle(value: unknown): SharedBundleV1 {
       ? record.skills.map(readSkillItem).filter((item): item is SharedSkillItem => Boolean(item))
       : [];
     if (!skills.length) {
-      throw new Error("Skills set bundle has no importable skills.");
+      throw new Error(t("app.shared_bundle_no_importable_skills", currentLocale()));
     }
     return {
       schemaVersion: 1,
       type: "skills-set",
-      name: name || "Shared skills",
+      name: name || t("app.shared_bundle_shared_skills_name", currentLocale()),
       description: typeof record.description === "string" ? record.description : undefined,
       skills,
     };
@@ -293,18 +293,20 @@ function parseSharedBundle(value: unknown): SharedBundleV1 {
   if (type === "workspace-profile") {
     const workspace = readRecord(record.workspace);
     if (!workspace) {
-      throw new Error("Workspace profile bundle is missing workspace payload.");
+      throw new Error(t("app.shared_bundle_missing_workspace_payload", currentLocale()));
     }
     return {
       schemaVersion: 1,
       type: "workspace-profile",
-      name: name || "Shared workspace profile",
+      name: name || t("app.shared_bundle_shared_workspace_profile_name", currentLocale()),
       description: typeof record.description === "string" ? record.description : undefined,
       workspace: workspace as OpenworkWorkspaceExport,
     };
   }
 
-  throw new Error(`Unsupported bundle type: ${type || "unknown"}`);
+  throw new Error(
+    t("app.shared_bundle_unsupported_type", currentLocale()).replace("{type}", type || t("settings.unknown", currentLocale()))
+  );
 }
 
 async function fetchSharedBundle(bundleUrl: string): Promise<SharedBundleV1> {
@@ -312,11 +314,11 @@ async function fetchSharedBundle(bundleUrl: string): Promise<SharedBundleV1> {
   try {
     targetUrl = new URL(bundleUrl);
   } catch {
-    throw new Error("Invalid shared bundle URL.");
+    throw new Error(t("app.shared_bundle_invalid_url", currentLocale()));
   }
 
   if (targetUrl.protocol !== "https:" && targetUrl.protocol !== "http:") {
-    throw new Error("Shared bundle URL must use http(s).");
+    throw new Error(t("app.shared_bundle_invalid_protocol", currentLocale()));
   }
 
   if (!targetUrl.searchParams.has("format")) {
@@ -335,7 +337,11 @@ async function fetchSharedBundle(bundleUrl: string): Promise<SharedBundleV1> {
     if (!response.ok) {
       const details = (await response.text()).trim();
       const suffix = details ? `: ${details}` : "";
-      throw new Error(`Failed to fetch bundle (${response.status})${suffix}`);
+      throw new Error(
+        t("app.shared_bundle_fetch_failed", currentLocale())
+          .replace("{status}", String(response.status))
+          .replace("{suffix}", suffix)
+      );
     }
     return parseSharedBundle(await response.json());
   } finally {
@@ -576,6 +582,7 @@ export default function App() {
 
   const location = useLocation();
   const navigate = useNavigate();
+  const translate = (key: string) => t(key, currentLocale());
 
   const [creatingSession, setCreatingSession] = createSignal(false);
   const [sessionViewLockUntil, setSessionViewLockUntil] = createSignal(0);
@@ -1421,7 +1428,7 @@ export default function App() {
 
         const command = resolvedDraft.command;
         if (!command) {
-          throw new Error("Command was not resolved.");
+          throw new Error(translate("app.command_not_resolved"));
         }
 
         // Slash command: route through session.command() API
@@ -1511,17 +1518,17 @@ export default function App() {
   async function compactCurrentSession(sessionIdOverride?: string) {
     const c = client();
     if (!c) {
-      throw new Error("Not connected to a server");
+      throw new Error(translate("app.not_connected_server"));
     }
 
     const sessionID = (sessionIdOverride ?? selectedSessionId() ?? "").trim();
     if (!sessionID) {
-      throw new Error("Select a session before compacting.");
+      throw new Error(translate("app.compact_select_session"));
     }
 
     const visible = messages();
     if (!visible.length) {
-      throw new Error("Nothing to compact yet.");
+      throw new Error(translate("app.compact_nothing"));
     }
 
     const model = selectedSessionModel();
@@ -1687,7 +1694,7 @@ export default function App() {
   async function renameSessionTitle(sessionID: string, title: string) {
     const trimmed = title.trim();
     if (!trimmed) {
-      throw new Error("Session name is required");
+      throw new Error(translate("app.session_name_required"));
     }
     
     await renameSession(sessionID, trimmed);
@@ -1699,7 +1706,7 @@ export default function App() {
     if (!trimmed) return;
     const c = client();
     if (!c) {
-      throw new Error("Not connected to a server");
+      throw new Error(translate("app.not_connected_server"));
     }
 
     const root = workspaceStore.activeWorkspaceRoot().trim();
@@ -1759,7 +1766,7 @@ export default function App() {
   const BUILTIN_COMPACT_COMMAND = {
     id: "builtin:compact",
     name: "compact",
-    description: "Summarize this session to reduce context size.",
+    description: translate("app.compact_description"),
     source: "command" as const,
   };
 
@@ -1797,7 +1804,7 @@ export default function App() {
       if (!Array.isArray(provider.env) || provider.env.length === 0) continue;
       const existing = merged[id] ?? [];
       if (existing.some((method) => method.type === "api")) continue;
-      merged[id] = [...existing, { type: "api", label: "API key" }];
+      merged[id] = [...existing, { type: "api", label: translate("mcp.api_key") }];
     }
     return merged;
   };
@@ -1805,7 +1812,7 @@ export default function App() {
   const loadProviderAuthMethods = async () => {
     const c = client();
     if (!c) {
-      throw new Error("Not connected to a server");
+      throw new Error(translate("app.not_connected_server"));
     }
     const methods = unwrap(await c.provider.auth());
     return buildProviderAuthMethods(methods as Record<string, ProviderAuthMethod[]>, providers());
@@ -1815,7 +1822,7 @@ export default function App() {
     setProviderAuthError(null);
     const c = client();
     if (!c) {
-      throw new Error("Not connected to a server");
+      throw new Error(translate("app.not_connected_server"));
     }
     try {
       const cachedMethods = providerAuthMethods();
@@ -1824,12 +1831,12 @@ export default function App() {
         : await loadProviderAuthMethods();
       const providerIds = Object.keys(authMethods).sort();
       if (!providerIds.length) {
-        throw new Error("No providers available");
+        throw new Error(translate("app.no_providers_available"));
       }
 
       const resolved = providerId?.trim() ?? "";
       if (!resolved) {
-        throw new Error("Provider ID is required");
+        throw new Error(translate("app.provider_id_required"));
       }
 
       const methods = authMethods[resolved];
@@ -1848,7 +1855,7 @@ export default function App() {
         authorization: auth,
       };
     } catch (error) {
-      const message = describeProviderError(error, "Failed to connect provider");
+      const message = describeProviderError(error, translate("app.provider_connect_failed"));
       setProviderAuthError(message);
       throw error instanceof Error ? error : new Error(message);
     }
@@ -1858,16 +1865,16 @@ export default function App() {
     setProviderAuthError(null);
     const c = client();
     if (!c) {
-      throw new Error("Not connected to a server");
+      throw new Error(translate("app.not_connected_server"));
     }
 
     const resolved = providerId?.trim();
     if (!resolved) {
-      throw new Error("Provider ID is required");
+      throw new Error(translate("app.provider_id_required"));
     }
 
     if (!Number.isInteger(methodIndex) || methodIndex < 0) {
-      throw new Error("OAuth method is required");
+      throw new Error(translate("app.provider_oauth_method_required"));
     }
 
     try {
@@ -1880,9 +1887,9 @@ export default function App() {
       assertNoClientError(result);
       const updated = unwrap(await c.provider.list());
       globalSync.set("provider", updated);
-      return `Connected ${resolved}`;
+      return translate("app.connected_with_provider").replace("{provider}", resolved);
     } catch (error) {
-      const message = describeProviderError(error, "Failed to complete OAuth");
+      const message = describeProviderError(error, translate("app.provider_complete_oauth_failed"));
       setProviderAuthError(message);
       throw error instanceof Error ? error : new Error(message);
     }
@@ -1892,12 +1899,12 @@ export default function App() {
     setProviderAuthError(null);
     const c = client();
     if (!c) {
-      throw new Error("Not connected to a server");
+      throw new Error(translate("app.not_connected_server"));
     }
 
     const trimmed = apiKey.trim();
     if (!trimmed) {
-      throw new Error("API key is required");
+      throw new Error(translate("app.api_key_required"));
     }
 
     try {
@@ -1907,9 +1914,9 @@ export default function App() {
       });
       const updated = unwrap(await c.provider.list());
       globalSync.set("provider", updated);
-      return `Connected ${providerId}`;
+      return translate("app.connected_with_provider").replace("{provider}", providerId);
     } catch (error) {
-      const message = describeProviderError(error, "Failed to save API key");
+      const message = describeProviderError(error, translate("app.provider_save_api_key_failed"));
       setProviderAuthError(message);
       throw error instanceof Error ? error : new Error(message);
     }
@@ -1923,7 +1930,7 @@ export default function App() {
       setProviderAuthMethods(methods);
       setProviderAuthModalOpen(true);
     } catch (error) {
-      const message = describeProviderError(error, "Failed to load providers");
+      const message = describeProviderError(error, translate("app.provider_load_failed"));
       setProviderAuthError(message);
       throw error;
     } finally {
@@ -1939,7 +1946,7 @@ export default function App() {
   async function saveSessionExport(sessionID: string) {
     const c = client();
     if (!c) {
-      throw new Error("Not connected to a server");
+      throw new Error(translate("app.not_connected_server"));
     }
 
     const session = unwrap(await c.session.get({ sessionID }));
@@ -2194,11 +2201,11 @@ export default function App() {
   const [modelVariant, setModelVariant] = createSignal<string | null>(null);
 
   const MODEL_VARIANT_OPTIONS = [
-    { value: "none", label: "None" },
-    { value: "low", label: "Low" },
-    { value: "medium", label: "Medium" },
-    { value: "high", label: "High" },
-    { value: "xhigh", label: "X-High" },
+    { value: "none", label: translate("app.model_variant_none") },
+    { value: "low", label: translate("app.model_variant_low") },
+    { value: "medium", label: translate("app.model_variant_medium") },
+    { value: "high", label: translate("app.model_variant_high") },
+    { value: "xhigh", label: translate("app.model_variant_xhigh") },
   ];
 
   const normalizeModelVariant = (value: string | null) => {
@@ -2211,18 +2218,18 @@ export default function App() {
 
   const formatModelVariantLabel = (value: string | null) => {
     const normalized = normalizeModelVariant(value) ?? "none";
-    return MODEL_VARIANT_OPTIONS.find((option) => option.value === normalized)?.label ?? "None";
+    return MODEL_VARIANT_OPTIONS.find((option) => option.value === normalized)?.label ?? translate("app.model_variant_none");
   };
 
   const handleEditModelVariant = () => {
     const next = window.prompt(
-      "Model variant (none, low, medium, high, xhigh)",
+      translate("app.model_variant_prompt"),
       normalizeModelVariant(modelVariant()) ?? "none"
     );
     if (next == null) return;
     const normalized = normalizeModelVariant(next);
     if (!normalized) {
-      window.alert("Variant must be one of: none, low, medium, high, xhigh.");
+      window.alert(translate("app.model_variant_invalid"));
       return;
     }
     setModelVariant(normalized);
@@ -2768,7 +2775,7 @@ export default function App() {
         window.setTimeout(resolve, 200);
       });
     }
-    throw new Error("OpenWork worker is not ready yet.");
+    throw new Error(translate("app.shared_bundle_worker_not_ready"));
   };
 
   const createWorkerForSharedBundle = async (request: SharedBundleDeepLink, bundle: SharedBundleV1) => {
@@ -2776,10 +2783,10 @@ export default function App() {
     const hostUrl = target.hostUrl.trim();
     const token = target.token.trim();
     if (!hostUrl || !token) {
-      throw new Error("Share link detected. Configure an OpenWork worker host and token, then open the link again.");
+      throw new Error(translate("app.shared_bundle_missing_host_token"));
     }
 
-    const label = (request.label?.trim() || bundle.name?.trim() || "Shared setup").slice(0, 80);
+    const label = (request.label?.trim() || bundle.name?.trim() || translate("app.shared_bundle_default_label")).slice(0, 80);
     const ok = await workspaceStore.createRemoteWorkspaceFlow({
       openworkHostUrl: hostUrl,
       openworkToken: token,
@@ -2790,7 +2797,7 @@ export default function App() {
     });
 
     if (!ok) {
-      throw new Error("Failed to create a worker from this share link.");
+      throw new Error(translate("app.shared_bundle_create_worker_failed"));
     }
   };
 
@@ -2811,7 +2818,7 @@ export default function App() {
       if (!client || !workspaceId || !connected) {
         if (!sharedBundleNoticeShown()) {
           setSharedBundleNoticeShown(true);
-          setError("Share link detected. Connect to a writable OpenWork worker to import this bundle.");
+          setError(translate("app.shared_bundle_import_requires_writable_worker"));
         }
         return;
       }
@@ -2820,7 +2827,7 @@ export default function App() {
       if (!target.hostUrl.trim() || !target.token.trim()) {
         if (!sharedBundleNoticeShown()) {
           setSharedBundleNoticeShown(true);
-          setError("Share link detected. Configure an OpenWork host and token to create a new worker.");
+          setError(translate("app.shared_bundle_create_requires_host_token"));
         }
         return;
       }
@@ -3377,10 +3384,10 @@ export default function App() {
         setScheduledJobs([]);
         const status =
           openworkServerStatus() === "disconnected"
-            ? "OpenWork server unavailable. Connect to sync scheduled tasks."
+            ? translate("app.scheduled_server_unavailable")
             : openworkServerStatus() === "limited"
-              ? "OpenWork server needs a token to load scheduled tasks."
-              : "OpenWork server not ready.";
+              ? translate("app.scheduled_server_token_required")
+              : translate("app.scheduled_server_not_ready");
         setScheduledJobsStatus(status);
         return;
       }
@@ -3396,7 +3403,7 @@ export default function App() {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         setScheduledJobs([]);
-        setScheduledJobsStatus(message || "Failed to load scheduled tasks.");
+        setScheduledJobsStatus(message || translate("app.scheduled_load_failed"));
       } finally {
         setScheduledJobsBusy(false);
       }
@@ -3432,7 +3439,7 @@ export default function App() {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setScheduledJobs([]);
-      setScheduledJobsStatus(message || "Failed to load scheduled tasks.");
+      setScheduledJobsStatus(message || translate("app.scheduled_load_failed"));
     } finally {
       setScheduledJobsBusy(false);
     }
@@ -3442,7 +3449,7 @@ export default function App() {
     if (scheduledJobsSource() === "remote") {
       const scheduler = resolveOpenworkScheduler();
       if (!scheduler) {
-        throw new Error("OpenWork server unavailable. Connect to sync scheduled tasks.");
+        throw new Error(translate("app.scheduled_server_unavailable"));
       }
       const response = await scheduler.client.deleteScheduledJob(scheduler.workspaceId, name);
       setScheduledJobs((current) => current.filter((entry) => entry.slug !== response.job.slug));
@@ -3450,10 +3457,10 @@ export default function App() {
     }
 
     if (!isTauriRuntime()) {
-      throw new Error("Scheduled tasks require the desktop app.");
+      throw new Error(translate("app.scheduled_desktop_required"));
     }
     if (isWindowsPlatform()) {
-      throw new Error("Scheduler is not supported on Windows yet.");
+      throw new Error(translate("app.scheduled_windows_unsupported"));
     }
     const root = workspaceStore.activeWorkspaceRoot().trim();
     const job = await schedulerDeleteJob(name, root || undefined);
@@ -3561,7 +3568,7 @@ export default function App() {
         setActiveSoulHeartbeats([]);
         setSoulHeartbeatsBusy(false);
         if (hadStatusError) {
-          setSoulError("Soul status is partially unavailable.");
+          setSoulError(translate("app.soul_status_partially_unavailable"));
         }
         return;
       }
@@ -3571,7 +3578,7 @@ export default function App() {
         const response = await client.listSoulHeartbeats(activeOpenworkId, 30);
         setActiveSoulHeartbeats(Array.isArray(response.items) ? response.items : []);
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to load soul heartbeats.";
+        const message = error instanceof Error ? error.message : translate("app.soul_heartbeats_load_failed");
         setActiveSoulHeartbeats([]);
         setSoulError(message);
       } finally {
@@ -3579,10 +3586,10 @@ export default function App() {
       }
 
       if (hadStatusError && !soulError()) {
-        setSoulError("Soul status is partially unavailable.");
+        setSoulError(translate("app.soul_status_partially_unavailable"));
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to load soul status.";
+      const message = error instanceof Error ? error.message : translate("app.soul_status_load_failed");
       setSoulStatusByWorkspaceId({});
       setActiveSoulHeartbeats([]);
       setSoulHeartbeatsBusy(false);
@@ -3881,13 +3888,13 @@ export default function App() {
 
   async function connectNotion() {
     if (workspaceStore.activeWorkspaceDisplay().workspaceType !== "local") {
-      setNotionError("Notion connections are only available for local workspaces.");
+      setNotionError(translate("app.notion_local_only"));
       return;
     }
 
     const projectDir = workspaceProjectDir().trim();
     if (!projectDir) {
-      setNotionError("Pick a workspace folder first.");
+      setNotionError(translate("app.error.pick_workspace_folder"));
       return;
     }
 
@@ -3901,7 +3908,7 @@ export default function App() {
       openworkCapabilities?.mcp?.write;
 
     if (!canUseOpenworkServer && !isTauriRuntime()) {
-      setNotionError("Notion connections require the desktop app.");
+      setNotionError(translate("app.notion_desktop_required"));
       return;
     }
 
@@ -3944,7 +3951,7 @@ export default function App() {
 
         const result = await writeOpencodeConfig("project", projectDir, `${formatted}\n`);
         if (!result.ok) {
-          throw new Error(result.stderr || result.stdout || "Failed to update opencode.json");
+          throw new Error(result.stderr || result.stdout || translate("app.opencode_config_update_failed"));
         }
       }
 
@@ -3959,7 +3966,7 @@ export default function App() {
       }
     } catch (e) {
       setNotionStatus("error");
-      setNotionError(e instanceof Error ? e.message : "Failed to connect Notion.");
+      setNotionError(e instanceof Error ? e.message : translate("app.notion_connect_failed"));
     } finally {
       setNotionBusy(false);
     }
@@ -3980,7 +3987,7 @@ export default function App() {
 
     if (isRemoteWorkspace) {
       if (!canUseOpenworkServer) {
-        setMcpStatus("OpenWork server unavailable. MCP config is read-only.");
+        setMcpStatus(translate("app.mcp_server_readonly"));
         setMcpServers([]);
         setMcpStatuses({});
         return;
@@ -4009,12 +4016,12 @@ export default function App() {
         }
 
         if (!next.length) {
-          setMcpStatus("No MCP servers configured yet.");
+          setMcpStatus(translate("app.mcp_no_servers"));
         }
       } catch (e) {
         setMcpServers([]);
         setMcpStatuses({});
-        setMcpStatus(e instanceof Error ? e.message : "Failed to load MCP servers");
+        setMcpStatus(e instanceof Error ? e.message : translate("app.mcp_load_failed"));
       }
       return;
     }
@@ -4043,25 +4050,25 @@ export default function App() {
         }
 
         if (!next.length) {
-          setMcpStatus("No MCP servers configured yet.");
+          setMcpStatus(translate("app.mcp_no_servers"));
         }
       } catch (e) {
         setMcpServers([]);
         setMcpStatuses({});
-        setMcpStatus(e instanceof Error ? e.message : "Failed to load MCP servers");
+        setMcpStatus(e instanceof Error ? e.message : translate("app.mcp_load_failed"));
       }
       return;
     }
 
     if (!isTauriRuntime()) {
-      setMcpStatus("MCP configuration is only available for local workspaces.");
+      setMcpStatus(translate("app.mcp_local_only"));
       setMcpServers([]);
       setMcpStatuses({});
       return;
     }
 
     if (!projectDir) {
-      setMcpStatus("Pick a workspace folder to load MCP servers.");
+      setMcpStatus(translate("app.mcp_pick_workspace_to_load"));
       setMcpServers([]);
       setMcpStatuses({});
       return;
@@ -4073,7 +4080,7 @@ export default function App() {
       if (!config.exists || !config.content) {
         setMcpServers([]);
         setMcpStatuses({});
-        setMcpStatus("No opencode.json found yet. Create one by connecting an MCP.");
+        setMcpStatus(translate("app.mcp_no_config_file"));
         return;
       }
 
@@ -4092,12 +4099,12 @@ export default function App() {
       }
 
       if (!next.length) {
-        setMcpStatus("No MCP servers configured yet.");
+        setMcpStatus(translate("app.mcp_no_servers"));
       }
     } catch (e) {
       setMcpServers([]);
       setMcpStatuses({});
-      setMcpStatus(e instanceof Error ? e.message : "Failed to load MCP servers");
+      setMcpStatus(e instanceof Error ? e.message : translate("app.mcp_load_failed"));
     }
   }
 
@@ -4138,7 +4145,7 @@ export default function App() {
       openworkCapabilities?.mcp?.write;
 
     if (isRemoteWorkspace && !canUseOpenworkServer) {
-      setMcpStatus("OpenWork server unavailable. MCP config is read-only.");
+      setMcpStatus(translate("app.mcp_server_readonly"));
       finishPerf(developerMode(), "mcp.connect", "blocked", startedAt, {
         reason: "openwork-server-unavailable",
       });
@@ -4214,7 +4221,7 @@ export default function App() {
 
       if (entryType === "remote") {
         if (!entry.url) {
-          throw new Error("Missing MCP URL.");
+          throw new Error(translate("app.mcp_missing_url"));
         }
         mcpEntryConfig["url"] = entry.url;
         if (entry.oauth) {
@@ -4224,7 +4231,7 @@ export default function App() {
 
       if (entryType === "local") {
         if (!entry.command?.length) {
-          throw new Error("Missing MCP command.");
+          throw new Error(translate("app.mcp_missing_command"));
         }
         mcpEntryConfig["command"] = entry.command;
       }
@@ -4263,7 +4270,7 @@ export default function App() {
           `${JSON.stringify(existingConfig, null, 2)}\n`
         );
         if (!writeResult.ok) {
-          throw new Error(writeResult.stderr || writeResult.stdout || "Failed to write opencode.json");
+          throw new Error(writeResult.stderr || writeResult.stdout || translate("app.opencode_config_write_failed"));
         }
       }
 
@@ -4345,7 +4352,7 @@ export default function App() {
       openworkCapabilities?.mcp?.write;
 
     if (isRemoteWorkspace && !canUseOpenworkServer) {
-      setMcpStatus("OpenWork server unavailable. MCP auth is read-only.");
+      setMcpStatus(translate("app.mcp_auth_readonly"));
       return;
     }
 
@@ -5419,21 +5426,21 @@ export default function App() {
     const canUseGlobalPluginScope = !isRemoteWorkspace && isTauriRuntime();
     const skillsAccessHint = isRemoteWorkspace
       ? openworkStatus === "disconnected"
-        ? "OpenWork server unavailable. Add the server URL/token in Advanced to manage skills."
+        ? translate("app.skills_access_disconnected")
         : openworkStatus === "limited"
-          ? "OpenWork server needs a host token to install/update skills. Add it in Advanced and reconnect."
+          ? translate("app.skills_access_limited")
           : openworkServerCanWriteSkills()
             ? null
-            : "OpenWork server is read-only for skills. Add a host token in Advanced to enable installs."
+            : translate("app.skills_access_readonly")
       : null;
     const pluginsAccessHint = isRemoteWorkspace
       ? openworkStatus === "disconnected"
-        ? "OpenWork server unavailable. Plugins are read-only."
+        ? translate("app.plugins_access_disconnected")
         : openworkStatus === "limited"
-          ? "OpenWork server needs a token to edit plugins."
+          ? translate("app.plugins_access_limited")
           : openworkServerCanWritePlugins()
             ? null
-            : "OpenWork server is read-only for plugins."
+            : translate("app.plugins_access_readonly")
       : null;
 
     return {
@@ -5534,6 +5541,9 @@ export default function App() {
       refreshSoulData: (options?: { force?: boolean }) => refreshSoulData(options).catch(() => undefined),
       runSoulPrompt,
       activeWorkspaceRoot: workspaceStore.activeWorkspaceRoot().trim(),
+      messages: visibleMessages(),
+      artifacts: activeArtifacts(),
+      workingFiles: activeWorkingFiles(),
       refreshSkills: (options?: { force?: boolean }) => refreshSkills(options).catch(() => undefined),
       refreshHubSkills: (options?: { force?: boolean }) => refreshHubSkills(options).catch(() => undefined),
       refreshPlugins: (scopeOverride?: PluginScope) =>

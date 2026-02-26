@@ -53,7 +53,7 @@ export default function AddMcpModal(props: AddMcpModalProps) {
 
       props.onAdd({
         name: trimmedName,
-        description: "",
+        description: tr("mcp.no_env_required"),
         type: "remote",
         url: trimmedUrl,
         oauth: true,
@@ -67,7 +67,7 @@ export default function AddMcpModal(props: AddMcpModalProps) {
 
       props.onAdd({
         name: trimmedName,
-        description: "",
+        description: tr("mcp.no_env_required"),
         type: "local",
         command: trimmedCommand.split(/\s+/),
         oauth: false,

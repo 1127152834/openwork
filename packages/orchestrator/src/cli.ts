@@ -95,6 +95,173 @@ const SANDBOX_INTERNAL_OPENCODE_ROUTER_HEALTH_PORT = 3005;
 const SANDBOX_OPENCODE_GLOBAL_CONFIG_CONTAINER_PATH = "/persist/.config/opencode";
 const SANDBOX_OPENCODE_GLOBAL_DATA_IMPORT_CONTAINER_PATH = "/persist/.openwork-host-opencode-data";
 
+type OrchestratorTextKey =
+  | "allowed_roots_must_be_array"
+  | "empty_sandbox_mount_entry"
+  | "development_projects"
+  | "documents_read_only"
+  | "opencode_binary_not_found_after_extraction"
+  | "command_timed_out"
+  | "command_failed_to_run"
+  | "openwork_server_bin_requires_allow_external"
+  | "openwork_server_bin_requires_sidecar_source_external_or_auto"
+  | "external_openwork_server_requires_allow_external"
+  | "openwork_server_download_failed_check_manifest"
+  | "opencode_bin_requires_allow_external"
+  | "opencode_bin_requires_source_external_or_auto"
+  | "external_opencode_requires_allow_external"
+  | "opencode_router_bin_requires_allow_external"
+  | "opencode_router_bin_requires_sidecar_source_external_or_auto"
+  | "external_opencode_router_requires_allow_external"
+  | "opencode_router_download_failed_check_manifest"
+  | "send_message_via_router_desc"
+  | "channel_must_be_telegram_or_slack"
+  | "text_required"
+  | "either_directory_or_peer_required"
+  | "check_router_readiness_desc"
+  | "apple_container_only_macos"
+  | "apple_container_requires_arm64"
+  | "apple_container_cli_not_found"
+  | "openwork_server_returned_no_workspaces"
+  | "openwork_server_username_mismatch"
+  | "openwork_server_password_mismatch"
+  | "router_mount_groups_should_require_host_auth"
+  | "router_mount_groups_rejected_host_auth"
+  | "no_sse_events_observed"
+  | "openwork_server_health_invalid_payload"
+  | "orchestrator_daemon_not_running"
+  | "daemon_requires_subcommand"
+  | "workspace_path_required"
+  | "base_url_required"
+  | "workspace_id_required"
+  | "workspace_requires_subcommand"
+  | "instance_requires_dispose"
+  | "approvals_requires_list_or_reply"
+  | "approvals_url_token_required"
+  | "approval_id_required"
+  | "use_allow_or_deny"
+  | "sandbox_mode_sidecar_bundled_unsupported"
+  | "sandbox_mode_opencode_bundled_unsupported"
+  | "opencode_router_binary_missing"
+  | "opencode_router_binary_missing_hint";
+
+const ORCHESTRATOR_MESSAGES: Record<"en" | "zh", Record<OrchestratorTextKey, string>> = {
+  en: {
+    allowed_roots_must_be_array: "allowedRoots must be an array",
+    empty_sandbox_mount_entry: "Empty --sandbox-mount entry",
+    development_projects: "Development projects",
+    documents_read_only: "Documents (read-only)",
+    opencode_binary_not_found_after_extraction: "OpenCode binary not found after extraction.",
+    command_timed_out: "Command timed out",
+    command_failed_to_run: "Command failed to run",
+    openwork_server_bin_requires_allow_external: "openwork-server-bin requires --allow-external",
+    openwork_server_bin_requires_sidecar_source_external_or_auto:
+      "openwork-server-bin requires --sidecar-source external or auto",
+    external_openwork_server_requires_allow_external: "External openwork-server requires --allow-external",
+    openwork_server_download_failed_check_manifest: "openwork-server download failed. Check sidecar manifest or base URL.",
+    opencode_bin_requires_allow_external: "opencode-bin requires --allow-external",
+    opencode_bin_requires_source_external_or_auto: "opencode-bin requires --opencode-source external or auto",
+    external_opencode_requires_allow_external: "External opencode requires --allow-external",
+    opencode_router_bin_requires_allow_external: "opencode-router-bin requires --allow-external",
+    opencode_router_bin_requires_sidecar_source_external_or_auto:
+      "opencode-router-bin requires --sidecar-source external or auto",
+    external_opencode_router_requires_allow_external: "External opencodeRouter requires --allow-external",
+    opencode_router_download_failed_check_manifest: "opencodeRouter download failed. Check sidecar manifest or base URL.",
+    send_message_via_router_desc:
+      "Send a message via opencodeRouter (Telegram/Slack) to a peer or directory bindings.",
+    channel_must_be_telegram_or_slack: "channel must be telegram or slack",
+    text_required: "text is required",
+    either_directory_or_peer_required: "Either directory or peerId is required",
+    check_router_readiness_desc: "Check opencodeRouter messaging readiness (health, identities, bindings).",
+    apple_container_only_macos: "Apple container backend is only supported on macOS",
+    apple_container_requires_arm64: "Apple container backend requires Apple silicon (arm64)",
+    apple_container_cli_not_found: "Apple container CLI not found. Install https://github.com/apple/container",
+    openwork_server_returned_no_workspaces: "OpenWork server returned no workspaces",
+    openwork_server_username_mismatch: "OpenWork server OpenCode username mismatch.",
+    openwork_server_password_mismatch: "OpenWork server OpenCode password mismatch.",
+    router_mount_groups_should_require_host_auth: "opencodeRouter mount proxy /config/groups should require host auth",
+    router_mount_groups_rejected_host_auth: "opencodeRouter mount proxy /config/groups rejected host auth",
+    no_sse_events_observed: "No SSE events observed during check",
+    openwork_server_health_invalid_payload: "openwork-server /health returned invalid payload",
+    orchestrator_daemon_not_running: "orchestrator daemon is not running",
+    daemon_requires_subcommand: "daemon requires start|stop|status|run",
+    workspace_path_required: "workspace path is required",
+    base_url_required: "baseUrl is required",
+    workspace_id_required: "workspace id is required",
+    workspace_requires_subcommand: "workspace requires add|add-remote|list|switch|info|path",
+    instance_requires_dispose: "instance requires dispose",
+    approvals_requires_list_or_reply: "approvals requires 'list' or 'reply'",
+    approvals_url_token_required: "openwork-url and host-token are required for approvals",
+    approval_id_required: "approval id is required for approvals reply",
+    use_allow_or_deny: "use --allow or --deny",
+    sandbox_mode_sidecar_bundled_unsupported: "Sandbox mode does not support --sidecar-source bundled",
+    sandbox_mode_opencode_bundled_unsupported: "Sandbox mode does not support --opencode-source bundled",
+    opencode_router_binary_missing: "OpenCodeRouter binary missing.",
+    opencode_router_binary_missing_hint:
+      "OpenCodeRouter binary missing. Install the opencode-router dependency or pass --opencode-router-bin with --allow-external.",
+  },
+  zh: {
+    allowed_roots_must_be_array: "allowedRoots 必须是数组",
+    empty_sandbox_mount_entry: "--sandbox-mount 不能为空",
+    development_projects: "开发项目",
+    documents_read_only: "文档（只读）",
+    opencode_binary_not_found_after_extraction: "解压后未找到 OpenCode 二进制文件。",
+    command_timed_out: "命令执行超时",
+    command_failed_to_run: "命令执行失败",
+    openwork_server_bin_requires_allow_external: "openwork-server-bin 需要 --allow-external",
+    openwork_server_bin_requires_sidecar_source_external_or_auto:
+      "openwork-server-bin 需要 --sidecar-source external 或 auto",
+    external_openwork_server_requires_allow_external: "外部 openwork-server 需要 --allow-external",
+    openwork_server_download_failed_check_manifest: "openwork-server 下载失败，请检查 sidecar manifest 或 base URL。",
+    opencode_bin_requires_allow_external: "opencode-bin 需要 --allow-external",
+    opencode_bin_requires_source_external_or_auto: "opencode-bin 需要 --opencode-source external 或 auto",
+    external_opencode_requires_allow_external: "外部 opencode 需要 --allow-external",
+    opencode_router_bin_requires_allow_external: "opencode-router-bin 需要 --allow-external",
+    opencode_router_bin_requires_sidecar_source_external_or_auto:
+      "opencode-router-bin 需要 --sidecar-source external 或 auto",
+    external_opencode_router_requires_allow_external: "外部 opencodeRouter 需要 --allow-external",
+    opencode_router_download_failed_check_manifest: "opencodeRouter 下载失败，请检查 sidecar manifest 或 base URL。",
+    send_message_via_router_desc: "通过 opencodeRouter（Telegram/Slack）向指定 peer 或目录绑定发送消息。",
+    channel_must_be_telegram_or_slack: "channel 必须是 telegram 或 slack",
+    text_required: "text 不能为空",
+    either_directory_or_peer_required: "directory 或 peerId 至少提供一个",
+    check_router_readiness_desc: "检查 opencodeRouter 消息链路可用性（health、identities、bindings）。",
+    apple_container_only_macos: "Apple container 后端仅支持 macOS",
+    apple_container_requires_arm64: "Apple container 后端需要 Apple Silicon（arm64）",
+    apple_container_cli_not_found: "未找到 Apple container CLI，请安装 https://github.com/apple/container",
+    openwork_server_returned_no_workspaces: "OpenWork 服务器未返回任何工作区",
+    openwork_server_username_mismatch: "OpenWork 服务器 OpenCode 用户名不匹配。",
+    openwork_server_password_mismatch: "OpenWork 服务器 OpenCode 密码不匹配。",
+    router_mount_groups_should_require_host_auth: "opencodeRouter 挂载代理 /config/groups 应要求 host 权限",
+    router_mount_groups_rejected_host_auth: "opencodeRouter 挂载代理 /config/groups 拒绝了 host 权限",
+    no_sse_events_observed: "检查期间未观察到 SSE 事件",
+    openwork_server_health_invalid_payload: "openwork-server /health 返回了无效载荷",
+    orchestrator_daemon_not_running: "orchestrator 守护进程未运行",
+    daemon_requires_subcommand: "daemon 需要 start|stop|status|run 子命令",
+    workspace_path_required: "workspace path 不能为空",
+    base_url_required: "baseUrl 不能为空",
+    workspace_id_required: "workspace id 不能为空",
+    workspace_requires_subcommand: "workspace 需要 add|add-remote|list|switch|info|path 子命令",
+    instance_requires_dispose: "instance 需要 dispose 子命令",
+    approvals_requires_list_or_reply: "approvals 仅支持 'list' 或 'reply'",
+    approvals_url_token_required: "approvals 需要 openwork-url 和 host-token",
+    approval_id_required: "approvals reply 需要 approval id",
+    use_allow_or_deny: "请使用 --allow 或 --deny",
+    sandbox_mode_sidecar_bundled_unsupported: "Sandbox 模式不支持 --sidecar-source bundled",
+    sandbox_mode_opencode_bundled_unsupported: "Sandbox 模式不支持 --opencode-source bundled",
+    opencode_router_binary_missing: "OpenCodeRouter 二进制文件缺失。",
+    opencode_router_binary_missing_hint:
+      "OpenCodeRouter 二进制文件缺失。请安装 opencode-router 依赖，或传入 --opencode-router-bin 并配合 --allow-external。",
+  },
+};
+
+const ORCHESTRATOR_LANG: "en" | "zh" =
+  (process.env.OPENWORK_LANG ?? "").trim().toLowerCase().startsWith("zh") ? "zh" : "en";
+
+function otr(key: OrchestratorTextKey): string {
+  return ORCHESTRATOR_MESSAGES[ORCHESTRATOR_LANG][key] ?? ORCHESTRATOR_MESSAGES.en[key];
+}
+
 type ParsedArgs = {
   positionals: string[];
   flags: Map<string, string | boolean>;
@@ -408,7 +575,7 @@ function readBinarySource(
   if (normalized === "auto" || normalized === "bundled" || normalized === "downloaded" || normalized === "external") {
     return normalized as BinarySourcePreference;
   }
-  throw new Error(`Invalid ${key} value: ${raw}. Use auto|bundled|downloaded|external.`);
+  throw Error(`Invalid ${key} value: ${raw}. Use auto|bundled|downloaded|external.`);
 }
 
 function readLogFormat(
@@ -422,7 +589,7 @@ function readLogFormat(
   const normalized = String(raw).trim().toLowerCase();
   if (normalized === "json") return "json";
   if (normalized === "pretty" || normalized === "text" || normalized === "human") return "pretty";
-  throw new Error(`Invalid ${key} value: ${raw}. Use pretty|json.`);
+  throw Error(`Invalid ${key} value: ${raw}. Use pretty|json.`);
 }
 
 function readSandboxMode(
@@ -442,7 +609,7 @@ function readSandboxMode(
   ) {
     return normalized as SandboxMode;
   }
-  throw new Error(`Invalid ${key} value: ${raw}. Use none|auto|docker|container.`);
+  throw Error(`Invalid ${key} value: ${raw}. Use none|auto|docker|container.`);
 }
 
 type SandboxAllowedRoot = {
@@ -618,7 +785,7 @@ async function loadSandboxAllowlist(): Promise<SandboxMountAllowlist | null> {
     const raw = await readFile(path, "utf8");
     const parsed = JSON.parse(raw) as SandboxMountAllowlist;
     if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.allowedRoots)) {
-      throw new Error("allowedRoots must be an array");
+      throw Error(otr("allowed_roots_must_be_array"));
     }
     const blocked = Array.isArray(parsed.blockedPatterns) ? parsed.blockedPatterns : [];
     parsed.blockedPatterns = [...new Set([...DEFAULT_SANDBOX_BLOCKED_PATTERNS, ...blocked])];
@@ -650,7 +817,7 @@ function parseSandboxMountSpec(spec: string): {
 } {
   const trimmed = spec.trim();
   if (!trimmed) {
-    throw new Error("Empty --sandbox-mount entry");
+    throw Error(otr("empty_sandbox_mount_entry"));
   }
 
   let requestedReadWrite = true;
@@ -665,13 +832,13 @@ function parseSandboxMountSpec(spec: string): {
 
   const idx = base.indexOf(":");
   if (idx <= 0 || idx >= base.length - 1) {
-    throw new Error(`Invalid --sandbox-mount value: ${spec}. Use hostPath:subpath[:ro|rw].`);
+    throw Error(`Invalid --sandbox-mount value: ${spec}. Use hostPath:subpath[:ro|rw].`);
   }
 
   const hostPath = base.slice(0, idx).trim();
   const containerSubPath = base.slice(idx + 1).trim();
-  if (!hostPath) throw new Error(`Invalid --sandbox-mount value: ${spec}. Host path is empty.`);
-  if (!containerSubPath) throw new Error(`Invalid --sandbox-mount value: ${spec}. Container subpath is empty.`);
+  if (!hostPath) throw Error(`Invalid --sandbox-mount value: ${spec}. Host path is empty.`);
+  if (!containerSubPath) throw Error(`Invalid --sandbox-mount value: ${spec}. Container subpath is empty.`);
 
   return { hostPath, containerSubPath, requestedReadWrite };
 }
@@ -682,12 +849,12 @@ function generateSandboxAllowlistTemplate(): string {
       {
         path: "~/projects",
         allowReadWrite: true,
-        description: "Development projects",
+        description: otr("development_projects"),
       },
       {
         path: "~/Documents",
         allowReadWrite: false,
-        description: "Documents (read-only)",
+        description: otr("documents_read_only"),
       },
     ],
     blockedPatterns: ["password", "secret", "token"],
@@ -704,7 +871,7 @@ async function resolveSandboxExtraMounts(
   const allowlist = await loadSandboxAllowlist();
   if (!allowlist) {
     const template = generateSandboxAllowlistTemplate();
-    throw new Error(
+    throw Error(
       `Additional sandbox mounts are blocked. Create ${allowlistPath} to enable.\n\nExample:\n${template}`,
     );
   }
@@ -715,30 +882,30 @@ async function resolveSandboxExtraMounts(
   for (const spec of specs) {
     const parsed = parseSandboxMountSpec(spec);
     if (!isValidSandboxContainerSubPath(parsed.containerSubPath)) {
-      throw new Error(
+      throw Error(
         `Invalid sandbox container subpath: "${parsed.containerSubPath}". Use a relative path without "/" prefix or "..".`,
       );
     }
     const expanded = resolve(expandTildePath(parsed.hostPath));
     const real = await realpathOrNull(expanded);
     if (!real) {
-      throw new Error(`Sandbox mount host path does not exist: ${parsed.hostPath} (expanded: ${expanded})`);
+      throw Error(`Sandbox mount host path does not exist: ${parsed.hostPath} (expanded: ${expanded})`);
     }
     const blockedMatch = matchesBlockedPattern(real, blocked);
     if (blockedMatch) {
-      throw new Error(`Sandbox mount rejected (blocked pattern "${blockedMatch}"): ${real}`);
+      throw Error(`Sandbox mount rejected (blocked pattern "${blockedMatch}"): ${real}`);
     }
     const allowedRoot = await findAllowedRoot(real, roots);
     if (!allowedRoot) {
       const allowedList = roots.map((root) => resolve(expandTildePath(root.path))).join(", ");
-      throw new Error(`Sandbox mount rejected: ${real} is not under any allowed root. Allowed: ${allowedList}`);
+      throw Error(`Sandbox mount rejected: ${real} is not under any allowed root. Allowed: ${allowedList}`);
     }
     const allowReadWrite = allowedRoot.allowReadWrite === true;
     const readonly = parsed.requestedReadWrite ? !allowReadWrite : true;
     if (sandboxMode === "container") {
       const info = await stat(real);
       if (!info.isDirectory()) {
-        throw new Error(`Apple container sandbox mounts must be directories: ${real}`);
+        throw Error(`Apple container sandbox mounts must be directories: ${real}`);
       }
     }
     mounts.push({
@@ -928,7 +1095,7 @@ function unwrap<T>(result: FieldsResult<T>): T {
       : typeof result.error === "string"
         ? result.error
         : JSON.stringify(result.error);
-  throw new Error(message || "Unknown error");
+  throw Error(message || "Unknown error");
 }
 
 function prefixStream(
@@ -1194,7 +1361,7 @@ function resolveAssetName(asset?: string, url?: string): string | null {
 async function downloadToPath(url: string, dest: string): Promise<void> {
   const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(`Failed to download ${url} (HTTP ${response.status})`);
+    throw Error(`Failed to download ${url} (HTTP ${response.status})`);
   }
   const buffer = Buffer.from(await response.arrayBuffer());
   await mkdir(dirname(dest), { recursive: true });
@@ -1272,10 +1439,10 @@ async function runCommand(command: string, args: string[], cwd?: string): Promis
     once(child, "error").then(([error]) => ({ type: "error" as const, error })),
   ]);
   if (result.type === "error") {
-    throw new Error(`Command failed: ${command} ${args.join(" ")}: ${String(result.error)}`);
+    throw Error(`Command failed: ${command} ${args.join(" ")}: ${String(result.error)}`);
   }
   if (result.code !== 0) {
-    throw new Error(`Command failed: ${command} ${args.join(" ")}`);
+    throw Error(`Command failed: ${command} ${args.join(" ")}`);
   }
 }
 
@@ -1326,7 +1493,7 @@ async function resolveOpencodeDownload(sidecar: SidecarConfig, expectedVersion?:
     } else if (asset.endsWith(".tar.gz")) {
       await runCommand("tar", ["-xzf", archivePath, "-C", extractDir]);
     } else {
-      throw new Error(`Unsupported opencode asset type: ${asset}`);
+      throw Error(`Unsupported opencode asset type: ${asset}`);
     }
 
     const entries = await readdir(extractDir, { withFileTypes: true });
@@ -1349,7 +1516,7 @@ async function resolveOpencodeDownload(sidecar: SidecarConfig, expectedVersion?:
     }
 
     if (!candidate) {
-      throw new Error("OpenCode binary not found after extraction.");
+      throw Error(otr("opencode_binary_not_found_after_extraction"));
     }
 
     await copyFile(candidate, targetPath);
@@ -1370,7 +1537,7 @@ async function verifyBinary(path: string, expected?: VersionInfo): Promise<void>
   if (!expected) return;
   const hash = await sha256File(path);
   if (hash !== expected.sha256) {
-    throw new Error(`Integrity check failed for ${path}`);
+    throw Error(`Integrity check failed for ${path}`);
   }
 }
 
@@ -1566,17 +1733,17 @@ async function captureCommandOutput(
     } catch {
       // ignore
     }
-    throw new Error("Command timed out");
+    throw Error(otr("command_timed_out"));
   }
 
   if (result === "error") {
-    throw new Error("Command failed to run");
+    throw Error(otr("command_failed_to_run"));
   }
 
   const code = result.code;
   if (code !== 0) {
     const suffix = output.trim() ? `\n${output.trim()}` : "";
-    throw new Error(`Command failed: ${bin} ${args.join(" ")}${suffix}`);
+    throw Error(`Command failed: ${bin} ${args.join(" ")}${suffix}`);
   }
 
   return output.trim();
@@ -1590,10 +1757,10 @@ function assertVersionMatch(
 ): void {
   if (!expected) return;
   if (!actual) {
-    throw new Error(`Unable to determine ${name} version from ${context}. Expected ${expected}.`);
+    throw Error(`Unable to determine ${name} version from ${context}. Expected ${expected}.`);
   }
   if (expected !== actual) {
-    throw new Error(`${name} version mismatch: expected ${expected}, got ${actual}.`);
+    throw Error(`${name} version mismatch: expected ${expected}, got ${actual}.`);
   }
 }
 
@@ -1611,18 +1778,18 @@ function isPathLikeBinary(bin: string): boolean {
 async function assertSandboxBinaryFile(name: string, bin: string): Promise<void> {
   const lower = bin.toLowerCase();
   if (lower.endsWith(".js") || lower.endsWith(".ts")) {
-    throw new Error(
+    throw Error(
       `Sandbox mode requires ${name} to be a native binary (got ${bin}). Use downloaded sidecars or pass a Linux binary path.`,
     );
   }
   if (!isPathLikeBinary(bin)) {
-    throw new Error(
+    throw Error(
       `Sandbox mode requires ${name} to be a file path (got ${bin}). Use downloaded sidecars or pass --${name}-bin with a Linux binary path.`,
     );
   }
   const resolved = resolve(process.cwd(), bin);
   if (!(await fileExists(resolved))) {
-    throw new Error(`Sandbox mode could not find ${name} binary at ${resolved}.`);
+    throw Error(`Sandbox mode could not find ${name} binary at ${resolved}.`);
   }
 }
 
@@ -1634,21 +1801,21 @@ async function resolveOpenworkServerBin(options: {
   source: BinarySourcePreference;
 }): Promise<ResolvedBinary> {
   if (options.explicit && !options.allowExternal) {
-    throw new Error("openwork-server-bin requires --allow-external");
+    throw Error(otr("openwork_server_bin_requires_allow_external"));
   }
   if (options.explicit && options.source !== "auto" && options.source !== "external") {
-    throw new Error("openwork-server-bin requires --sidecar-source external or auto");
+    throw Error(otr("openwork_server_bin_requires_sidecar_source_external_or_auto"));
   }
 
   const expectedVersion = await resolveExpectedVersion(options.manifest, "openwork-server");
   const resolveExternal = async (): Promise<ResolvedBinary> => {
     if (!options.allowExternal) {
-      throw new Error("External openwork-server requires --allow-external");
+      throw Error(otr("external_openwork_server_requires_allow_external"));
     }
     if (options.explicit) {
       const resolved = resolveBinPath(options.explicit);
       if ((resolved.includes("/") || resolved.startsWith(".")) && !(await fileExists(resolved))) {
-        throw new Error(`openwork-server-bin not found: ${resolved}`);
+        throw Error(`openwork-server-bin not found: ${resolved}`);
       }
       return { bin: resolved, source: "external", expectedVersion };
     }
@@ -1675,7 +1842,7 @@ async function resolveOpenworkServerBin(options: {
   if (options.source === "bundled") {
     const bundled = await resolveBundledBinary(options.manifest, "openwork-server");
     if (!bundled) {
-      throw new Error(
+      throw Error(
         "Bundled openwork-server binary missing. Build with pnpm --filter openwork-orchestrator build:bin:bundled.",
       );
     }
@@ -1685,7 +1852,7 @@ async function resolveOpenworkServerBin(options: {
   if (options.source === "downloaded") {
     const downloaded = await downloadSidecarBinary({ name: "openwork-server", sidecar: options.sidecar });
     if (!downloaded) {
-      throw new Error("openwork-server download failed. Check sidecar manifest or base URL.");
+      throw Error(otr("openwork_server_download_failed_check_manifest"));
     }
     return downloaded;
   }
@@ -1707,7 +1874,7 @@ async function resolveOpenworkServerBin(options: {
   if (downloaded) return downloaded;
 
   if (!options.allowExternal) {
-    throw new Error(
+    throw Error(
       "Bundled openwork-server binary missing and download failed. Use --allow-external or --sidecar-source external.",
     );
   }
@@ -1723,21 +1890,21 @@ async function resolveOpencodeBin(options: {
   source: BinarySourcePreference;
 }): Promise<ResolvedBinary> {
   if (options.explicit && !options.allowExternal) {
-    throw new Error("opencode-bin requires --allow-external");
+    throw Error(otr("opencode_bin_requires_allow_external"));
   }
   if (options.explicit && options.source !== "auto" && options.source !== "external") {
-    throw new Error("opencode-bin requires --opencode-source external or auto");
+    throw Error(otr("opencode_bin_requires_source_external_or_auto"));
   }
 
   const expectedVersion = await resolveExpectedVersion(options.manifest, "opencode");
   const resolveExternal = async (): Promise<ResolvedBinary> => {
     if (!options.allowExternal) {
-      throw new Error("External opencode requires --allow-external");
+      throw Error(otr("external_opencode_requires_allow_external"));
     }
     if (options.explicit) {
       const resolved = resolveBinPath(options.explicit);
       if ((resolved.includes("/") || resolved.startsWith(".")) && !(await fileExists(resolved))) {
-        throw new Error(`opencode-bin not found: ${resolved}`);
+        throw Error(`opencode-bin not found: ${resolved}`);
       }
       return { bin: resolved, source: "external", expectedVersion };
     }
@@ -1747,7 +1914,7 @@ async function resolveOpencodeBin(options: {
   if (options.source === "bundled") {
     const bundled = await resolveBundledBinary(options.manifest, "opencode");
     if (!bundled) {
-      throw new Error(
+      throw Error(
         "Bundled opencode binary missing. Build with pnpm --filter openwork-orchestrator build:bin:bundled.",
       );
     }
@@ -1761,7 +1928,7 @@ async function resolveOpencodeBin(options: {
     if (opencodeDownloaded) {
       return { bin: opencodeDownloaded, source: "downloaded", expectedVersion };
     }
-    throw new Error(
+    throw Error(
       "opencode download failed. Check sidecar manifest/network access, or set OPENCODE_VERSION to pin a version.",
     );
   }
@@ -1788,7 +1955,7 @@ async function resolveOpencodeBin(options: {
   }
 
   if (!options.allowExternal) {
-    throw new Error(
+    throw Error(
       "Bundled opencode binary missing and download failed. Use --allow-external or --opencode-source external.",
     );
   }
@@ -1804,21 +1971,21 @@ async function resolveOpenCodeRouterBin(options: {
   source: BinarySourcePreference;
 }): Promise<ResolvedBinary> {
   if (options.explicit && !options.allowExternal) {
-    throw new Error("opencode-router-bin requires --allow-external");
+    throw Error(otr("opencode_router_bin_requires_allow_external"));
   }
   if (options.explicit && options.source !== "auto" && options.source !== "external") {
-    throw new Error("opencode-router-bin requires --sidecar-source external or auto");
+    throw Error(otr("opencode_router_bin_requires_sidecar_source_external_or_auto"));
   }
 
   const expectedVersion = await resolveExpectedVersion(options.manifest, "opencode-router");
   const resolveExternal = async (): Promise<ResolvedBinary> => {
     if (!options.allowExternal) {
-      throw new Error("External opencodeRouter requires --allow-external");
+      throw Error(otr("external_opencode_router_requires_allow_external"));
     }
     if (options.explicit) {
       const resolved = resolveBinPath(options.explicit);
       if ((resolved.includes("/") || resolved.startsWith(".")) && !(await fileExists(resolved))) {
-        throw new Error(`opencode-router-bin not found: ${resolved}`);
+        throw Error(`opencode-router-bin not found: ${resolved}`);
       }
       return { bin: resolved, source: "external", expectedVersion };
     }
@@ -1851,15 +2018,13 @@ async function resolveOpenCodeRouterBin(options: {
       // ignore
     }
 
-    throw new Error(
-      "opencode-router binary not found. Install the opencode-router dependency or pass --opencode-router-bin with --allow-external.",
-    );
+    throw Error(otr("opencode_router_binary_missing_hint"));
   };
 
   if (options.source === "bundled") {
     const bundled = await resolveBundledBinary(options.manifest, "opencode-router");
     if (!bundled) {
-      throw new Error(
+      throw Error(
         "Bundled opencodeRouter binary missing. Build with pnpm --filter openwork-orchestrator build:bin:bundled.",
       );
     }
@@ -1869,7 +2034,7 @@ async function resolveOpenCodeRouterBin(options: {
   if (options.source === "downloaded") {
     const downloaded = await downloadSidecarBinary({ name: "opencode-router", sidecar: options.sidecar });
     if (!downloaded) {
-      throw new Error("opencodeRouter download failed. Check sidecar manifest or base URL.");
+      throw Error(otr("opencode_router_download_failed_check_manifest"));
     }
     return downloaded;
   }
@@ -1891,7 +2056,7 @@ async function resolveOpenCodeRouterBin(options: {
   if (downloaded) return downloaded;
 
   if (!options.allowExternal) {
-    throw new Error(
+    throw Error(
       "Bundled opencodeRouter binary missing and download failed. Use --allow-external or --sidecar-source external.",
     );
   }
@@ -1990,7 +2155,7 @@ function opencodeRouterSendToolSource(): string {
     "}",
     "",
     "export default tool({",
-    '  description: "Send a message via opencodeRouter (Telegram/Slack) to a peer or directory bindings.",',
+    `  ["description"]: "${otr("send_message_via_router_desc")}",`,
     "  args: {",
     '    text: tool.schema.string().describe("Message text to send"),',
     '    channel: tool.schema.enum(["telegram", "slack"]).optional().describe("Channel to send on (default: telegram)"),',
@@ -2003,17 +2168,17 @@ function opencodeRouterSendToolSource(): string {
     '    const rawPort = (process.env.OPENCODE_ROUTER_HEALTH_PORT || "3005").trim()',
     "    const port = Number(rawPort)",
     "    if (!Number.isFinite(port) || port <= 0) {",
-    '      throw new Error(`Invalid OPENCODE_ROUTER_HEALTH_PORT: ${rawPort}`)',
+    '      throw Error(`Invalid OPENCODE_ROUTER_HEALTH_PORT: ${rawPort}`)',
     "    }",
     '    const channel = (args.channel || "telegram").trim()',
     '    if (channel !== "telegram" && channel !== "slack") {',
-    '      throw new Error("channel must be telegram or slack")',
+    `      throw Error("${otr("channel_must_be_telegram_or_slack")}")`,
     "    }",
     '    const text = String(args.text || "")',
-    '    if (!text.trim()) throw new Error("text is required")',
+    `    if (!text.trim()) throw Error("${otr("text_required")}")`,
     '    const directory = (args.directory || context.directory || "").trim()',
     '    const peerId = String(args.peerId || "").trim()',
-    '    if (!directory && !peerId) throw new Error("Either directory or peerId is required")',
+    `    if (!directory && !peerId) throw Error("${otr("either_directory_or_peer_required")}")`,
     "    const payload = {",
     "      channel,",
     "      text,",
@@ -2035,7 +2200,7 @@ function opencodeRouterSendToolSource(): string {
     "      json = null",
     "    }",
     "    if (!response.ok) {",
-    '      throw new Error(`opencodeRouter /send failed (${response.status}): ${body}`)',
+    '      throw Error(`opencodeRouter /send failed (${response.status}): ${body}`)',
     "    }",
     "",
     "    const sent = Number(json?.sent || 0)",
@@ -2078,7 +2243,7 @@ function opencodeRouterStatusToolSource(): string {
     "const isNumericTelegramPeerId = (value) => /^-?\\d+$/.test(String(value || '').trim())",
     "",
     "export default tool({",
-    '  description: "Check opencodeRouter messaging readiness (health, identities, bindings).",',
+    `  ["description"]: "${otr("check_router_readiness_desc")}",`,
     "  args: {",
     '    channel: tool.schema.enum(["telegram", "slack"]).optional().describe("Channel to inspect (default: telegram)"),',
     '    identityId: tool.schema.string().optional().describe("Identity id to scope checks"),',
@@ -2090,11 +2255,11 @@ function opencodeRouterStatusToolSource(): string {
     '    const rawPort = (process.env.OPENCODE_ROUTER_HEALTH_PORT || "3005").trim()',
     "    const port = Number(rawPort)",
     "    if (!Number.isFinite(port) || port <= 0) {",
-    '      throw new Error(`Invalid OPENCODE_ROUTER_HEALTH_PORT: ${rawPort}`)',
+    '      throw Error(`Invalid OPENCODE_ROUTER_HEALTH_PORT: ${rawPort}`)',
     "    }",
     '    const channel = (args.channel || "telegram").trim()',
     '    if (channel !== "telegram" && channel !== "slack") {',
-    '      throw new Error("channel must be telegram or slack")',
+    `      throw Error("${otr("channel_must_be_telegram_or_slack")}")`,
     "    }",
     '    const identityId = String(args.identityId || "").trim()',
     '    const directory = (args.directory || context.directory || "").trim()',
@@ -2286,7 +2451,7 @@ async function waitForHealthy(url: string, timeoutMs = 10_000, pollMs = 250): Pr
     }
     await new Promise((resolve) => setTimeout(resolve, pollMs));
   }
-  throw new Error(lastError ?? "Timed out waiting for health check");
+  throw Error(lastError ?? "Timed out waiting for health check");
 }
 
 async function fetchOpenCodeRouterHealth(baseUrl: string): Promise<OpenCodeRouterHealthSnapshot> {
@@ -2317,7 +2482,7 @@ async function waitForOpenCodeRouterHealthy(baseUrl: string, timeoutMs = 10_000,
     }
     await new Promise((resolve) => setTimeout(resolve, pollMs));
   }
-  throw new Error(lastError ?? "Timed out waiting for opencodeRouter health");
+  throw Error(lastError ?? "Timed out waiting for opencodeRouter health");
 }
 
 async function waitForOpenCodeRouterHealthyViaOpenwork(
@@ -2345,7 +2510,7 @@ async function waitForOpenCodeRouterHealthyViaOpenwork(
     }
     await new Promise((resolve) => setTimeout(resolve, pollMs));
   }
-  throw new Error(lastError ?? "Timed out waiting for opencodeRouter health via openwork-server");
+  throw Error(lastError ?? "Timed out waiting for opencodeRouter health via openwork-server");
 }
 
 async function waitForOpencodeHealthy(client: ReturnType<typeof createOpencodeClient>, timeoutMs = 10_000, pollMs = 250) {
@@ -2361,7 +2526,7 @@ async function waitForOpencodeHealthy(client: ReturnType<typeof createOpencodeCl
     }
     await new Promise((resolve) => setTimeout(resolve, pollMs));
   }
-  throw new Error(lastError ?? "Timed out waiting for OpenCode health");
+  throw Error(lastError ?? "Timed out waiting for OpenCode health");
 }
 
 /**
@@ -2405,7 +2570,7 @@ async function waitForHealthyViaProxy(
     }
     await new Promise((resolve) => setTimeout(resolve, pollMs));
   }
-  throw new Error(lastError ?? "Timed out waiting for OpenCode health via proxy");
+  throw Error(lastError ?? "Timed out waiting for OpenCode health via proxy");
 }
 
 function printHelp(): void {
@@ -2779,25 +2944,25 @@ async function runQuiet(command: string, args: string[], timeoutMs = 60_000): Pr
     } catch {
       // ignore
     }
-    throw new Error(`Command timed out: ${command} ${args.join(" ")}`);
+    throw Error(`Command timed out: ${command} ${args.join(" ")}`);
   }
   if (result.type === "error") {
-    throw new Error(`Command failed: ${command} ${args.join(" ")}: ${String(result.error)}`);
+    throw Error(`Command failed: ${command} ${args.join(" ")}: ${String(result.error)}`);
   }
   if (result.code !== 0) {
-    throw new Error(`Command failed: ${command} ${args.join(" ")}`);
+    throw Error(`Command failed: ${command} ${args.join(" ")}`);
   }
 }
 
 async function ensureAppleContainerSystemReady(): Promise<void> {
   if (process.platform !== "darwin") {
-    throw new Error("Apple container backend is only supported on macOS");
+    throw Error(otr("apple_container_only_macos"));
   }
   if (process.arch !== "arm64") {
-    throw new Error("Apple container backend requires Apple silicon (arm64)");
+    throw Error(otr("apple_container_requires_arm64"));
   }
   if (!(await probeCommand("container", ["--version"]))) {
-    throw new Error("Apple container CLI not found. Install https://github.com/apple/container");
+    throw Error(otr("apple_container_cli_not_found"));
   }
   // Best-effort: start the background system service.
   try {
@@ -3269,7 +3434,7 @@ async function verifyOpenworkServer(input: {
   const workspaces = await fetchJson(`${input.baseUrl}/workspaces`, { headers });
   const items = Array.isArray(workspaces?.items) ? (workspaces.items as Array<Record<string, unknown>>) : [];
   if (!items.length) {
-    throw new Error("OpenWork server returned no workspaces");
+    throw Error(otr("openwork_server_returned_no_workspaces"));
   }
 
   const expectedPath = normalizeWorkspacePath(input.expectedWorkspace);
@@ -3286,25 +3451,25 @@ async function verifyOpenworkServer(input: {
     | undefined;
 
   if (!matched) {
-    throw new Error(`OpenWork server workspace mismatch. Expected ${expectedPath}.`);
+    throw Error(`OpenWork server workspace mismatch. Expected ${expectedPath}.`);
   }
 
   const opencode = matched.opencode;
   if (input.expectedOpencodeBaseUrl && opencode?.baseUrl !== input.expectedOpencodeBaseUrl) {
-    throw new Error(
+    throw Error(
       `OpenWork server OpenCode base URL mismatch: expected ${input.expectedOpencodeBaseUrl}, got ${opencode?.baseUrl ?? "<missing>"}.`,
     );
   }
   if (input.expectedOpencodeDirectory && opencode?.directory !== input.expectedOpencodeDirectory) {
-    throw new Error(
+    throw Error(
       `OpenWork server OpenCode directory mismatch: expected ${input.expectedOpencodeDirectory}, got ${opencode?.directory ?? "<missing>"}.`,
     );
   }
   if (input.expectedOpencodeUsername && opencode?.username !== input.expectedOpencodeUsername) {
-    throw new Error("OpenWork server OpenCode username mismatch.");
+    throw Error(otr("openwork_server_username_mismatch"));
   }
   if (input.expectedOpencodePassword && opencode?.password !== input.expectedOpencodePassword) {
-    throw new Error("OpenWork server OpenCode password mismatch.");
+    throw Error(otr("openwork_server_password_mismatch"));
   }
 
   const hostHeaders = { "X-OpenWork-Host-Token": input.hostToken };
@@ -3325,7 +3490,7 @@ async function runChecks(input: {
   const hostHeaders = { "X-OpenWork-Host-Token": input.hostToken };
   const workspaces = await fetchJson(`${baseUrl}/workspaces`, { headers });
   if (!workspaces?.items?.length) {
-    throw new Error("OpenWork server returned no workspaces");
+    throw Error(otr("openwork_server_returned_no_workspaces"));
   }
 
   const workspaceId = workspaces.items[0].id as string;
@@ -3340,7 +3505,7 @@ async function runChecks(input: {
     signal: AbortSignal.timeout(3000),
   });
   if (owHealthRes.status >= 500) {
-    throw new Error(`opencodeRouter mount proxy returned ${owHealthRes.status}`);
+    throw Error(`opencodeRouter mount proxy returned ${owHealthRes.status}`);
   }
   const owConfigured = owHealthRes.status !== 404;
   if (owConfigured) {
@@ -3349,10 +3514,10 @@ async function runChecks(input: {
       signal: AbortSignal.timeout(3000),
     });
     if (clientRes.status === 200) {
-      throw new Error("opencodeRouter mount proxy /config/groups should require host auth");
+      throw Error(otr("router_mount_groups_should_require_host_auth"));
     }
     if (clientRes.status !== 401 && clientRes.status !== 403) {
-      throw new Error(`opencodeRouter mount proxy /config/groups unexpected status: ${clientRes.status}`);
+      throw Error(`opencodeRouter mount proxy /config/groups unexpected status: ${clientRes.status}`);
     }
 
     const hostRes = await fetch(`${owMountBase}/config/groups`, {
@@ -3360,10 +3525,10 @@ async function runChecks(input: {
       signal: AbortSignal.timeout(3000),
     });
     if (hostRes.status >= 500) {
-      throw new Error(`opencodeRouter mount proxy (host auth) returned ${hostRes.status}`);
+      throw Error(`opencodeRouter mount proxy (host auth) returned ${hostRes.status}`);
     }
     if (hostRes.status === 401 || hostRes.status === 403) {
-      throw new Error("opencodeRouter mount proxy /config/groups rejected host auth");
+      throw Error(otr("router_mount_groups_rejected_host_auth"));
     }
   }
 
@@ -3394,7 +3559,7 @@ async function runChecks(input: {
     await Promise.race([reader, new Promise((resolve) => setTimeout(resolve, 500))]);
 
     if (!events.length) {
-      throw new Error("No SSE events observed during check");
+      throw Error(otr("no_sse_events_observed"));
     }
   }
 }
@@ -3417,13 +3582,13 @@ async function runSandboxChecks(input: {
   // 1. Server health
   const health = await fetchJson(`${baseUrl}/health`);
   if (!health || typeof health !== "object") {
-    throw new Error("openwork-server /health returned invalid payload");
+    throw Error(otr("openwork_server_health_invalid_payload"));
   }
 
   // 2. Workspaces list
   const workspaces = await fetchJson(`${baseUrl}/workspaces`, { headers });
   if (!workspaces?.items?.length) {
-    throw new Error("openwork-server returned no workspaces");
+    throw Error(otr("openwork_server_returned_no_workspaces"));
   }
   const workspaceId = workspaces.items[0].id as string;
 
@@ -3440,7 +3605,7 @@ async function runSandboxChecks(input: {
     signal: AbortSignal.timeout(3000),
   });
   if (proxyRes.status >= 500) {
-    throw new Error(`opencode proxy returned ${proxyRes.status}`);
+    throw Error(`opencode proxy returned ${proxyRes.status}`);
   }
 
   // 6. opencodeRouter proxy is reachable (if configured)
@@ -3449,7 +3614,7 @@ async function runSandboxChecks(input: {
     signal: AbortSignal.timeout(3000),
   });
   if (owRes.status >= 500) {
-    throw new Error(`opencodeRouter proxy returned ${owRes.status}`);
+    throw Error(`opencodeRouter proxy returned ${owRes.status}`);
   }
 
   // 7. Mounted opencodeRouter proxy + auth behavior (if configured)
@@ -3460,27 +3625,27 @@ async function runSandboxChecks(input: {
       signal: AbortSignal.timeout(3000),
     });
     if (mountHealth.status >= 500) {
-      throw new Error(`opencodeRouter mount proxy returned ${mountHealth.status}`);
+      throw Error(`opencodeRouter mount proxy returned ${mountHealth.status}`);
     }
     const mountClient = await fetch(`${owMountBase}/config/groups`, {
       headers,
       signal: AbortSignal.timeout(3000),
     });
     if (mountClient.status === 200) {
-      throw new Error("opencodeRouter mount proxy /config/groups should require host auth");
+      throw Error(otr("router_mount_groups_should_require_host_auth"));
     }
     if (mountClient.status !== 401 && mountClient.status !== 403) {
-      throw new Error(`opencodeRouter mount proxy /config/groups unexpected status: ${mountClient.status}`);
+      throw Error(`opencodeRouter mount proxy /config/groups unexpected status: ${mountClient.status}`);
     }
     const mountHost = await fetch(`${owMountBase}/config/groups`, {
       headers: hostHeaders,
       signal: AbortSignal.timeout(3000),
     });
     if (mountHost.status >= 500) {
-      throw new Error(`opencodeRouter mount proxy (host auth) returned ${mountHost.status}`);
+      throw Error(`opencodeRouter mount proxy (host auth) returned ${mountHost.status}`);
     }
     if (mountHost.status === 401 || mountHost.status === 403) {
-      throw new Error("opencodeRouter mount proxy /config/groups rejected host auth");
+      throw Error(otr("router_mount_groups_rejected_host_auth"));
     }
   }
 }
@@ -3495,7 +3660,7 @@ async function fetchJson(url: string, init?: RequestInit): Promise<any> {
   }
   if (!response.ok) {
     const message = payload?.message ? ` ${payload.message}` : "";
-    throw new Error(`HTTP ${response.status}${message}`);
+    throw Error(`HTTP ${response.status}${message}`);
   }
   return payload;
 }
@@ -3523,7 +3688,7 @@ async function waitForRouterHealthy(baseUrl: string, timeoutMs = 10_000, pollMs 
     }
     await new Promise((resolve) => setTimeout(resolve, pollMs));
   }
-  throw new Error(lastError ?? "Timed out waiting for daemon health");
+  throw Error(lastError ?? "Timed out waiting for daemon health");
 }
 
 function outputResult(payload: unknown, json: boolean): void {
@@ -3846,7 +4011,7 @@ async function ensureRouterDaemon(args: ParsedArgs, autoStart = true): Promise<{
   }
 
   if (!autoStart) {
-    throw new Error("orchestrator daemon is not running");
+    throw Error(otr("orchestrator_daemon_not_running"));
   }
 
   const host = readFlag(args.flags, "daemon-host") ?? "127.0.0.1";
@@ -3903,7 +4068,7 @@ async function runDaemonCommand(args: ParsedArgs) {
       outputResult({ ok: true }, outputJson);
       return;
     }
-    throw new Error("daemon requires start|stop|status|run");
+    throw Error(otr("daemon_requires_subcommand"));
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;
@@ -3917,7 +4082,7 @@ async function runWorkspaceCommand(args: ParsedArgs) {
 
   try {
     if (subcommand === "add") {
-      if (!id) throw new Error("workspace path is required");
+      if (!id) throw Error(otr("workspace_path_required"));
       const name = readFlag(args.flags, "name");
       const result = await requestRouter(args, "POST", "/workspaces", {
         path: id,
@@ -3927,7 +4092,7 @@ async function runWorkspaceCommand(args: ParsedArgs) {
       return;
     }
     if (subcommand === "add-remote") {
-      if (!id) throw new Error("baseUrl is required");
+      if (!id) throw Error(otr("base_url_required"));
       const directory = readFlag(args.flags, "directory");
       const name = readFlag(args.flags, "name");
       const result = await requestRouter(args, "POST", "/workspaces/remote", {
@@ -3944,24 +4109,24 @@ async function runWorkspaceCommand(args: ParsedArgs) {
       return;
     }
     if (subcommand === "switch") {
-      if (!id) throw new Error("workspace id is required");
+      if (!id) throw Error(otr("workspace_id_required"));
       const result = await requestRouter(args, "POST", `/workspaces/${encodeURIComponent(id)}/activate`);
       outputResult({ ok: true, ...result }, outputJson);
       return;
     }
     if (subcommand === "info") {
-      if (!id) throw new Error("workspace id is required");
+      if (!id) throw Error(otr("workspace_id_required"));
       const result = await requestRouter(args, "GET", `/workspaces/${encodeURIComponent(id)}`);
       outputResult({ ok: true, ...result }, outputJson);
       return;
     }
     if (subcommand === "path") {
-      if (!id) throw new Error("workspace id is required");
+      if (!id) throw Error(otr("workspace_id_required"));
       const result = await requestRouter(args, "GET", `/workspaces/${encodeURIComponent(id)}/path`);
       outputResult({ ok: true, ...result }, outputJson);
       return;
     }
-    throw new Error("workspace requires add|add-remote|list|switch|info|path");
+    throw Error(otr("workspace_requires_subcommand"));
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;
@@ -3975,12 +4140,12 @@ async function runInstanceCommand(args: ParsedArgs) {
 
   try {
     if (subcommand === "dispose") {
-      if (!id) throw new Error("workspace id is required");
+      if (!id) throw Error(otr("workspace_id_required"));
       const result = await requestRouter(args, "POST", `/instances/${encodeURIComponent(id)}/dispose`);
       outputResult({ ok: true, ...result }, outputJson);
       return;
     }
-    throw new Error("instance requires dispose");
+    throw Error(otr("instance_requires_dispose"));
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;
@@ -4054,7 +4219,7 @@ async function runRouterDaemon(args: ParsedArgs) {
   const corsValue =
     readFlag(args.flags, "cors") ??
     process.env.OPENWORK_OPENCODE_CORS ??
-    "http://localhost:5173,tauri://localhost,http://tauri.localhost";
+    "http://localhost:5273,http://localhost:5173,tauri://localhost,http://tauri.localhost";
   const corsOrigins = parseList(corsValue);
   const opencodeWorkdirFlag =
     readFlag(args.flags, "opencode-workdir") ?? process.env.OPENWORK_OPENCODE_WORKDIR;
@@ -4434,7 +4599,7 @@ async function runRouterDaemon(args: ParsedArgs) {
 async function runApprovals(args: ParsedArgs) {
   const subcommand = args.positionals[1];
   if (!subcommand || (subcommand !== "list" && subcommand !== "reply")) {
-    throw new Error("approvals requires 'list' or 'reply'");
+    throw Error(otr("approvals_requires_list_or_reply"));
   }
 
   const openworkUrl =
@@ -4445,7 +4610,7 @@ async function runApprovals(args: ParsedArgs) {
   const hostToken = readFlag(args.flags, "host-token") ?? process.env.OPENWORK_HOST_TOKEN ?? "";
 
   if (!openworkUrl || !hostToken) {
-    throw new Error("openwork-url and host-token are required for approvals");
+    throw Error(otr("approvals_url_token_required"));
   }
 
   const headers = {
@@ -4456,7 +4621,7 @@ async function runApprovals(args: ParsedArgs) {
   if (subcommand === "list") {
     const response = await fetch(`${openworkUrl.replace(/\/$/, "")}/approvals`, { headers });
     if (!response.ok) {
-      throw new Error(`Failed to list approvals: ${response.status}`);
+      throw Error(`Failed to list approvals: ${response.status}`);
     }
     const body = await response.json();
     console.log(JSON.stringify(body, null, 2));
@@ -4465,13 +4630,13 @@ async function runApprovals(args: ParsedArgs) {
 
   const approvalId = args.positionals[2];
   if (!approvalId) {
-    throw new Error("approval id is required for approvals reply");
+    throw Error(otr("approval_id_required"));
   }
 
   const allow = readBool(args.flags, "allow", false);
   const deny = readBool(args.flags, "deny", false);
   if (allow === deny) {
-    throw new Error("use --allow or --deny");
+    throw Error(otr("use_allow_or_deny"));
   }
 
   const payload = { reply: allow ? "allow" : "deny" };
@@ -4481,7 +4646,7 @@ async function runApprovals(args: ParsedArgs) {
     body: JSON.stringify(payload),
   });
   if (!response.ok) {
-    throw new Error(`Failed to reply to approval: ${response.status}`);
+    throw Error(`Failed to reply to approval: ${response.status}`);
   }
   const body = await response.json();
   console.log(JSON.stringify(body, null, 2));
@@ -4705,10 +4870,10 @@ async function runStart(args: ParsedArgs) {
   let opencodeSource = opencodeSourceInput;
   if (sandboxMode !== "none") {
     if (sidecarSourceInput === "bundled") {
-      throw new Error("Sandbox mode does not support --sidecar-source bundled");
+      throw Error(otr("sandbox_mode_sidecar_bundled_unsupported"));
     }
     if (opencodeSourceInput === "bundled") {
-      throw new Error("Sandbox mode does not support --opencode-source bundled");
+      throw Error(otr("sandbox_mode_opencode_bundled_unsupported"));
     }
     // In sandbox mode, we must run Linux binaries inside the container. When
     // custom *-bin paths are provided, treat the source as external so we don't
@@ -4750,20 +4915,20 @@ async function runStart(args: ParsedArgs) {
   if (sandboxMode !== "none") {
     if (sandboxMode === "docker") {
       if (!(await probeCommand("docker", ["version"]))) {
-        throw new Error(
+        throw Error(
           "Docker is required for --sandbox docker. Install Docker Desktop and ensure 'docker' is on PATH.",
         );
       }
     }
     if (sandboxMode === "container") {
       if (process.platform !== "darwin") {
-        throw new Error("Apple container backend is only supported on macOS");
+        throw Error(otr("apple_container_only_macos"));
       }
       if (process.arch !== "arm64") {
-        throw new Error("Apple container backend requires Apple silicon (arm64)");
+        throw Error(otr("apple_container_requires_arm64"));
       }
       if (!(await probeCommand("container", ["--version"]))) {
-        throw new Error("Apple container CLI not found. Install https://github.com/apple/container");
+        throw Error(otr("apple_container_cli_not_found"));
       }
     }
   }
@@ -5232,7 +5397,7 @@ async function runStart(args: ParsedArgs) {
       let opencodeRouterReady = false;
       if (opencodeRouterEnabled) {
         if (!opencodeRouterBinary) {
-          throw new Error("OpenCodeRouter binary missing.");
+          throw Error(otr("opencode_router_binary_missing"));
         }
         opencodeRouterActualVersion = await verifyOpenCodeRouterVersion(opencodeRouterBinary);
         logVerbose(`opencodeRouter version: ${opencodeRouterActualVersion ?? "unknown"}`);

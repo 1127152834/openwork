@@ -2,6 +2,7 @@ import { Bot, type BotError, type Context } from "grammy";
 import type { Logger } from "pino";
 
 import type { Config, TelegramIdentity } from "./config.js";
+import { resolveRouterLangFromEnv, routerText } from "./i18n.js";
 
 export type InboundMessage = {
   channel: "telegram";
@@ -44,9 +45,10 @@ export function createTelegramAdapter(
   logger: Logger,
   onMessage: MessageHandler,
 ): TelegramAdapter {
+  const lang = resolveRouterLangFromEnv();
   const token = identity.token?.trim() ?? "";
   if (!token) {
-    throw new Error("Telegram token is required for Telegram adapter");
+    throw new Error(routerText("token_required", lang));
   }
 
   const log = logger.child({ channel: "telegram", identityId: identity.id });

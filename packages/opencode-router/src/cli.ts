@@ -17,6 +17,7 @@ import {
   type TelegramIdentity,
 } from "./config.js";
 import { BridgeStore } from "./db.js";
+import { resolveRouterLangFromEnv, routerText } from "./i18n.js";
 import { createLogger } from "./logger.js";
 import { createClient } from "./opencode.js";
 import { parseSlackPeerId } from "./slack.js";
@@ -519,6 +520,7 @@ program
   .requiredOption("--to <recipient>", "Recipient ID (chat ID or peerId)")
   .requiredOption("--message <text>", "Message text to send")
   .action(async (opts: { channel: string; identity: string; to: string; message: string }) => {
+    const lang = resolveRouterLangFromEnv();
     const useJson = program.opts().json;
     const channelRaw = opts.channel.trim().toLowerCase();
     if (channelRaw !== "telegram" && channelRaw !== "slack") {
@@ -541,7 +543,7 @@ program
         if (!app) throw new Error(`Slack identity not found: ${identityId}`);
         const web = new WebClient(app.botToken);
         const peer = parseSlackPeerId(to);
-        if (!peer.channelId) throw new Error("Invalid recipient for Slack.");
+        if (!peer.channelId) throw new Error(routerText("peer_required", lang));
         await web.chat.postMessage({
           channel: peer.channelId,
           text: message,

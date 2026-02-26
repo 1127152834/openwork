@@ -3,10 +3,11 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import type { CommandItem } from "./types.js";
 import { parseFrontmatter, buildFrontmatter } from "./frontmatter.js";
+import { apiError } from "./errors.js";
+import { tr } from "./i18n.js";
 import { exists } from "./utils.js";
 import { projectCommandsDir } from "./workspace-files.js";
 import { validateCommandName, sanitizeCommandName } from "./validators.js";
-import { ApiError } from "./errors.js";
 
 async function listCommandsInDir(dir: string, scope: "workspace" | "global"): Promise<CommandItem[]> {
   if (!(await exists(dir))) return [];
@@ -50,7 +51,7 @@ export async function upsertCommand(
   payload: { name: string; description?: string; template: string; agent?: string; model?: string | null; subtask?: boolean },
 ): Promise<string> {
   if (!payload.template || payload.template.trim().length === 0) {
-    throw new ApiError(400, "invalid_command_template", "Command template is required");
+    throw apiError(400, "invalid_command_template", tr("command_template_required"));
   }
   const sanitized = sanitizeCommandName(payload.name);
   validateCommandName(sanitized);

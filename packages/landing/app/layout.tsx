@@ -1,6 +1,9 @@
 import "./globals.css";
+import type { Metadata } from "next";
 import { JetBrains_Mono, Sora } from "next/font/google";
 import Script from "next/script";
+import { pickByLocale } from "../lib/i18n";
+import { getLandingLocale } from "../lib/server-locale";
 
 const sora = Sora({
   subsets: ["latin"],
@@ -14,22 +17,33 @@ const jetbrains = JetBrains_Mono({
   display: "swap"
 });
 
-export const metadata = {
-  title: "OpenWork — Local-first, open-source Cowork alternative",
-  description:
-    "OpenWork is the open-source Cowork alternative powered by OpenCode—run local-first workflows with any model, and extend with skills.",
-  icons: {
-    icon: "/openwork-logo.svg",
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getLandingLocale();
+  return {
+    title: pickByLocale(
+      locale,
+      "OpenWork — Local-first, open-source Cowork alternative",
+      "OpenWork — 本地优先的开源 Cowork 替代方案",
+    ),
+    description: pickByLocale(
+      locale,
+      "OpenWork is the open-source Cowork alternative powered by OpenCode—run local-first workflows with any model, and extend with skills.",
+      "OpenWork 是基于 OpenCode 的开源 Cowork 替代方案，可在本地优先模式下使用任意模型运行工作流，并通过技能扩展能力。",
+    ),
+    icons: {
+      icon: "/openwork-logo.svg",
+    },
+  };
+}
 
-export default function RootLayout({
+export default async function RootLayout({
   children
 }: {
   children: React.ReactNode;
 }) {
+  const locale = await getLandingLocale();
   return (
-    <html lang="en" className={`${sora.variable} ${jetbrains.variable}`}>
+    <html lang={locale} className={`${sora.variable} ${jetbrains.variable}`}>
       <head>
         <Script
           id="posthog"

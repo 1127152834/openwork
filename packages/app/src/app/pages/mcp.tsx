@@ -379,7 +379,7 @@ export default function McpView(props: McpViewProps) {
                         </Show>
                       </div>
                       <p class="text-xs text-dls-secondary mt-0.5 line-clamp-2">
-                        {entry.description}
+                        {entry.description.startsWith("constants.") ? tr(entry.description) : entry.description}
                       </p>
                       <Show when={!connected() && !connecting()}>
                         <div class="mt-2 text-[11px] font-medium text-blue-11 group-hover:text-blue-12 transition-colors">

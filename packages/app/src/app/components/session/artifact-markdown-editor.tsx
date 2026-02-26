@@ -5,6 +5,7 @@ import Button from "../button";
 import LiveMarkdownEditor from "../live-markdown-editor";
 import type { OpenworkServerClient, OpenworkWorkspaceFileContent, OpenworkWorkspaceFileWriteResult } from "../../lib/openwork-server";
 import { OpenworkServerError } from "../../lib/openwork-server";
+import { t, currentLocale } from "../../../i18n";
 
 export type ArtifactMarkdownEditorProps = {
   open: boolean;
@@ -33,15 +34,16 @@ export default function ArtifactMarkdownEditor(props: ArtifactMarkdownEditorProp
 
   const [pendingPath, setPendingPath] = createSignal<string | null>(null);
   const [pendingReason, setPendingReason] = createSignal<"switch" | null>(null);
+  const translate = (key: string) => t(key, currentLocale());
 
   const path = createMemo(() => props.path?.trim() ?? "");
-  const title = createMemo(() => (path() ? basename(path()) : "Artifact"));
+  const title = createMemo(() => (path() ? basename(path()) : translate("artifact_editor.default_title")));
   const dirty = createMemo(() => draft() !== original());
   const canWrite = createMemo(() => Boolean(props.client && props.workspaceId));
   const canSave = createMemo(() => dirty() && !saving() && canWrite());
   const writeDisabledReason = createMemo(() => {
     if (canWrite()) return null;
-    return "Connect to an OpenWork server worker to edit files.";
+    return translate("artifact_editor.connect_server_to_edit");
   });
 
   const resetState = () => {
@@ -71,7 +73,7 @@ export default function ArtifactMarkdownEditor(props: ArtifactMarkdownEditorProp
       return;
     }
     if (!isMarkdown(target)) {
-      setError("Only markdown files are supported.");
+      setError(translate("artifact_editor.markdown_only"));
       return;
     }
 
@@ -102,7 +104,7 @@ export default function ArtifactMarkdownEditor(props: ArtifactMarkdownEditorProp
           result = (await client.readWorkspaceFile(workspaceId, actualPath)) as OpenworkWorkspaceFileContent;
         } catch (second) {
           if (second instanceof OpenworkServerError && second.status === 404) {
-            throw new OpenworkServerError(404, "file_not_found", "File not found (workspace root or outbox).");
+            throw new OpenworkServerError(404, "file_not_found", translate("artifact_editor.file_not_found_in_workspace"));
           }
           throw second;
         }
@@ -114,7 +116,7 @@ export default function ArtifactMarkdownEditor(props: ArtifactMarkdownEditorProp
       setResolvedPath(actualPath);
       setBaseUpdatedAt(typeof result.updatedAt === "number" ? result.updatedAt : null);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to load file";
+      const message = err instanceof Error ? err.message : translate("artifact_editor.load_failed");
       setError(message);
       setLoadedPath(target);
     } finally {
@@ -127,11 +129,11 @@ export default function ArtifactMarkdownEditor(props: ArtifactMarkdownEditorProp
     const workspaceId = props.workspaceId;
     const target = resolvedPath() ?? path();
     if (!client || !workspaceId || !target) {
-      props.onToast?.("Cannot save: OpenWork server not connected");
+      props.onToast?.(translate("artifact_editor.cannot_save_server_disconnected"));
       return;
     }
     if (!isMarkdown(target)) {
-      props.onToast?.("Only markdown files are supported");
+      props.onToast?.(translate("artifact_editor.markdown_only"));
       return;
     }
     if (!dirty()) return;
@@ -160,7 +162,7 @@ export default function ArtifactMarkdownEditor(props: ArtifactMarkdownEditorProp
         setConfirmOverwrite(true);
         return;
       }
-      const message = err instanceof Error ? err.message : "Failed to save";
+      const message = err instanceof Error ? err.message : translate("artifact_editor.save_failed");
       setError(message);
       props.onToast?.(message);
     } finally {
@@ -185,7 +187,7 @@ export default function ArtifactMarkdownEditor(props: ArtifactMarkdownEditorProp
       return;
     }
     // Reload is destructive; reuse the close-discard banner semantics.
-    setError("Discard changes to reload from disk (close and reopen), or save first.");
+    setError(translate("artifact_editor.reload_requires_discard_or_save"));
   };
 
   createEffect(() => {
@@ -241,7 +243,7 @@ export default function ArtifactMarkdownEditor(props: ArtifactMarkdownEditorProp
                 <div class="text-sm font-semibold text-dls-text truncate">{title()}</div>
                 <Show when={dirty()}>
                   <span class="text-[10px] px-2 py-0.5 rounded-full border border-amber-7/40 bg-amber-2/30 text-amber-11">
-                    Unsaved
+                    {translate("artifact_editor.unsaved")}
                   </span>
                 </Show>
               </div>
@@ -257,26 +259,26 @@ export default function ArtifactMarkdownEditor(props: ArtifactMarkdownEditorProp
               class="text-xs h-9 py-0 px-3"
               onClick={requestReload}
               disabled={loading() || saving()}
-              title="Reload from disk"
+              title={translate("artifact_editor.reload_from_disk")}
             >
               <RefreshCcw size={14} class={loading() ? "animate-spin" : ""} />
-              Reload
+              {translate("artifact_editor.reload")}
             </Button>
             <Button
               class="text-xs h-9 py-0 px-3"
               onClick={() => void save()}
               disabled={!canSave()}
-              title={writeDisabledReason() ?? "Save (Ctrl/Cmd+S)"}
+              title={writeDisabledReason() ?? translate("artifact_editor.save_with_shortcut")}
             >
               <Save size={14} class={saving() ? "animate-pulse" : ""} />
-              {saving() ? "Saving..." : "Save"}
+              {saving() ? translate("artifact_editor.saving") : translate("common.save")}
             </Button>
             <button
               type="button"
               class="p-2 rounded-lg text-dls-secondary hover:text-dls-text hover:bg-dls-hover"
               onClick={requestClose}
-              title="Close"
-              aria-label="Close"
+              title={translate("common.close")}
+              aria-label={translate("common.close")}
             >
               <X size={16} />
             </button>
@@ -301,10 +303,10 @@ export default function ArtifactMarkdownEditor(props: ArtifactMarkdownEditorProp
 
         <Show when={confirmOverwrite()}>
           <div class="shrink-0 px-4 py-2 border-b border-dls-border bg-amber-2/20 text-amber-11 text-xs flex items-center justify-between gap-3">
-            <div class="min-w-0">File changed since load. Overwrite anyway?</div>
+            <div class="min-w-0">{translate("artifact_editor.confirm_overwrite")}</div>
             <div class="shrink-0 flex items-center gap-2">
               <Button variant="outline" class="text-xs h-8 py-0 px-3" onClick={() => setConfirmOverwrite(false)}>
-                Cancel
+                {translate("common.cancel")}
               </Button>
               <Button
                 variant="danger"
@@ -314,7 +316,7 @@ export default function ArtifactMarkdownEditor(props: ArtifactMarkdownEditorProp
                   void save({ force: true });
                 }}
               >
-                Overwrite
+                {translate("artifact_editor.overwrite")}
               </Button>
             </div>
           </div>
@@ -322,10 +324,10 @@ export default function ArtifactMarkdownEditor(props: ArtifactMarkdownEditorProp
 
         <Show when={confirmDiscardClose()}>
           <div class="shrink-0 px-4 py-2 border-b border-dls-border bg-amber-2/20 text-amber-11 text-xs flex items-center justify-between gap-3">
-            <div class="min-w-0">Discard unsaved changes and close?</div>
+            <div class="min-w-0">{translate("artifact_editor.confirm_discard_close")}</div>
             <div class="shrink-0 flex items-center gap-2">
               <Button variant="outline" class="text-xs h-8 py-0 px-3" onClick={() => setConfirmDiscardClose(false)}>
-                Keep
+                {translate("artifact_editor.keep")}
               </Button>
               <Button
                 variant="secondary"
@@ -336,7 +338,7 @@ export default function ArtifactMarkdownEditor(props: ArtifactMarkdownEditorProp
                   props.onClose();
                 }}
               >
-                Discard
+                {translate("artifact_editor.discard")}
               </Button>
             </div>
           </div>
@@ -345,7 +347,7 @@ export default function ArtifactMarkdownEditor(props: ArtifactMarkdownEditorProp
         <Show when={pendingPath() && pendingReason() === "switch"}>
           <div class="shrink-0 px-4 py-2 border-b border-dls-border bg-amber-2/20 text-amber-11 text-xs flex items-center justify-between gap-3">
             <div class="min-w-0 truncate" title={pendingPath() ?? ""}>
-              Switch to {pendingPath()}
+              {translate("artifact_editor.switch_to").replace("{path}", pendingPath() ?? "")}
             </div>
             <div class="shrink-0 flex items-center gap-2">
               <Button
@@ -356,7 +358,7 @@ export default function ArtifactMarkdownEditor(props: ArtifactMarkdownEditorProp
                   setPendingReason(null);
                 }}
               >
-                Cancel
+                {translate("common.cancel")}
               </Button>
               <Button
                 variant="secondary"
@@ -370,10 +372,10 @@ export default function ArtifactMarkdownEditor(props: ArtifactMarkdownEditorProp
                   if (next) void load(next);
                 }}
               >
-                Discard & switch
+                {translate("artifact_editor.discard_and_switch")}
               </Button>
               <Button class="text-xs h-8 py-0 px-3" onClick={() => void save()} disabled={!canSave()}>
-                Save & switch
+                {translate("artifact_editor.save_and_switch")}
               </Button>
             </div>
           </div>
@@ -383,8 +385,7 @@ export default function ArtifactMarkdownEditor(props: ArtifactMarkdownEditorProp
           <LiveMarkdownEditor
             value={draft()}
             onChange={setDraft}
-            placeholder=""
-            ariaLabel="Artifact editor"
+            ariaLabel={translate("artifact_editor.aria_label")}
             class="h-full"
             autofocus
           />

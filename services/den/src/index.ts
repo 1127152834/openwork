@@ -9,6 +9,10 @@ import { env } from "./env.js"
 import { asyncRoute, errorMiddleware } from "./http/errors.js"
 import { workersRouter } from "./http/workers.js"
 
+const AUTH_ERROR = {
+  unauthorized: "unauthorized",
+} as const
+
 const app = express()
 const currentFile = fileURLToPath(import.meta.url)
 const publicDir = path.resolve(path.dirname(currentFile), "../public")
@@ -36,7 +40,7 @@ app.get("/v1/me", asyncRoute(async (req, res) => {
     headers: fromNodeHeaders(req.headers),
   })
   if (!session?.user?.id) {
-    res.status(401).json({ error: "unauthorized" })
+    res.status(401).json({ error: AUTH_ERROR.unauthorized })
     return
   }
   res.json(session)

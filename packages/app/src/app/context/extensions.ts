@@ -51,6 +51,13 @@ export function createExtensionsStore(options: {
 }) {
   // Translation helper that uses current language from i18n
   const translate = (key: string) => t(key, currentLocale());
+  const translateWithVars = (key: string, vars: Record<string, string | number>) => {
+    let text = translate(key);
+    for (const [name, value] of Object.entries(vars)) {
+      text = text.replaceAll(`{${name}}`, String(value));
+    }
+    return text;
+  };
 
   const [skills, setSkills] = createSignal<SkillCard[]>([]);
   const [skillsStatus, setSkillsStatus] = createSignal<string | null>(null);
@@ -118,7 +125,7 @@ export function createExtensionsStore(options: {
             }))
           : [];
         setHubSkills(next);
-        if (!next.length) setHubSkillsStatus("No hub skills found.");
+        if (!next.length) setHubSkillsStatus(translate("skills.no_hub_skills"));
         hubSkillsLoaded = true;
         hubSkillsRoot = root;
         return;
@@ -146,7 +153,7 @@ export function createExtensionsStore(options: {
       if (refreshHubSkillsAborted) return;
       const sorted = next.slice().sort((a, b) => a.name.localeCompare(b.name));
       setHubSkills(sorted);
-      if (!sorted.length) setHubSkillsStatus("No hub skills found.");
+      if (!sorted.length) setHubSkillsStatus(translate("skills.no_hub_skills"));
       hubSkillsLoaded = true;
       hubSkillsRoot = root;
     } catch (e) {
@@ -175,9 +182,9 @@ export function createExtensionsStore(options: {
 
     if (!canUseOpenworkServer) {
       if (isRemoteWorkspace) {
-        return { ok: false, message: "OpenWork server unavailable. Connect to install skills." };
+        return { ok: false, message: translate("skills.connect_host_to_install") };
       }
-      return { ok: false, message: "Hub install requires OpenWork server." };
+      return { ok: false, message: translate("skills.hub_install_requires_openwork_server") };
     }
 
     options.setBusy(true);
@@ -189,9 +196,9 @@ export function createExtensionsStore(options: {
       await refreshSkills({ force: true });
       await refreshHubSkills({ force: true });
       if (!result?.ok) {
-        return { ok: false, message: "Install failed." };
+        return { ok: false, message: translate("skills.install_failed") };
       }
-      return { ok: true, message: `Installed ${trimmed}.` };
+      return { ok: true, message: translateWithVars("skills.installed_named", { name: trimmed }) };
     } catch (e) {
       const message = e instanceof Error ? e.message : translate("skills.unknown_error");
       options.setError(addOpencodeCacheHint(message));
@@ -327,7 +334,7 @@ export function createExtensionsStore(options: {
     const c = options.client();
     if (!c) {
       setSkills([]);
-      setSkillsStatus("OpenWork server unavailable. Connect to load skills.");
+      setSkillsStatus(translate("skills.connect_host_to_load"));
       return;
     }
 
@@ -353,7 +360,7 @@ export function createExtensionsStore(options: {
 
       const rawClient = c as unknown as { _client?: { get: (input: { url: string }) => Promise<any> } };
       if (!rawClient._client) {
-        throw new Error("OpenCode client unavailable.");
+        throw new Error(translate("skills.opencode_client_unavailable"));
       }
 
       const result = await rawClient._client.get({ url: "/skill" });
@@ -418,9 +425,9 @@ export function createExtensionsStore(options: {
     const targetDir = options.projectDir().trim();
 
     if (scope !== "project" && !isLocalWorkspace) {
-      setPluginStatus("Global plugins are only available for local workers.");
+      setPluginStatus(translate("skills.plugins_global_local_only"));
       setPluginList([]);
-      setSidebarPluginStatus("Global plugins require a local worker.");
+      setSidebarPluginStatus(translate("skills.plugins_global_local_only_sidebar"));
       setSidebarPluginList([]);
       refreshPluginsInFlight = false;
       return;
@@ -445,14 +452,14 @@ export function createExtensionsStore(options: {
         setSidebarPluginList(list);
 
         if (!list.length) {
-          setPluginStatus("No plugins configured yet.");
+          setPluginStatus(translate("plugins.no_plugins_yet"));
         }
       } catch (e) {
         if (refreshPluginsAborted) return;
         setPluginList([]);
-        setSidebarPluginStatus("Failed to load plugins.");
+        setSidebarPluginStatus(translate("plugins.failed_load"));
         setSidebarPluginList([]);
-        setPluginStatus(e instanceof Error ? e.message : "Failed to load plugins.");
+        setPluginStatus(e instanceof Error ? e.message : translate("plugins.failed_load"));
       } finally {
         refreshPluginsInFlight = false;
       }
@@ -470,9 +477,9 @@ export function createExtensionsStore(options: {
     }
 
     if (!isLocalWorkspace && !canUseOpenworkServer) {
-      setPluginStatus("OpenWork server unavailable. Connect to manage plugins.");
+      setPluginStatus(translate("skills.plugins_access_disconnected"));
       setPluginList([]);
-      setSidebarPluginStatus("Connect an OpenWork server to load plugins.");
+      setSidebarPluginStatus(translate("skills.connect_openwork_to_load_plugins"));
       setSidebarPluginList([]);
       refreshPluginsInFlight = false;
       return;
@@ -554,7 +561,7 @@ export function createExtensionsStore(options: {
     }
 
     if (pluginScope() !== "project" && !isLocalWorkspace) {
-      setPluginStatus("Global plugins are only available for local workers.");
+      setPluginStatus(translate("skills.plugins_global_local_only"));
       return;
     }
 
@@ -578,7 +585,7 @@ export function createExtensionsStore(options: {
     }
 
     if (!isLocalWorkspace && !canUseOpenworkServer) {
-      setPluginStatus("OpenWork server unavailable. Connect to manage plugins.");
+      setPluginStatus(translate("skills.plugins_access_disconnected"));
       return;
     }
 
@@ -643,7 +650,7 @@ export function createExtensionsStore(options: {
     }
 
     if (!isLocalWorkspace) {
-      options.setError("Local workers are required to import skills.");
+      options.setError(translate("skills.local_workers_required_import"));
       return;
     }
 
@@ -729,7 +736,7 @@ export function createExtensionsStore(options: {
 
     // Remote workspace without server
     if (isRemoteWorkspace) {
-      const message = "OpenWork server unavailable. Connect to install skills.";
+      const message = translate("skills.connect_host_to_install");
       setSkillsStatus(message);
       return { ok: false, message };
     }
@@ -741,7 +748,7 @@ export function createExtensionsStore(options: {
     }
 
     if (!isLocalWorkspace) {
-      const message = "Local workers are required to install skills.";
+      const message = translate("skills.local_workers_required_install");
       options.setError(message);
       setSkillsStatus(message);
       return { ok: false, message };
@@ -836,7 +843,7 @@ export function createExtensionsStore(options: {
     }
 
     if (options.workspaceType() !== "local") {
-      options.setError("Local workers are required to uninstall skills.");
+      options.setError(translate("skills.local_workers_required_uninstall"));
       return;
     }
 
@@ -915,7 +922,7 @@ export function createExtensionsStore(options: {
     }
 
     if (isRemoteWorkspace) {
-      setSkillsStatus("OpenWork server unavailable. Connect to view skills.");
+      setSkillsStatus(translate("skills.connect_host_to_view"));
       return null;
     }
 
@@ -925,7 +932,7 @@ export function createExtensionsStore(options: {
     }
 
     if (!isLocalWorkspace) {
-      setSkillsStatus("Local workers are required to view skills.");
+      setSkillsStatus(translate("skills.local_workers_required_view"));
       return null;
     }
 
@@ -972,7 +979,7 @@ export function createExtensionsStore(options: {
         });
         options.markReloadRequired?.("skills", { type: "skill", name: trimmed, action: "updated" });
         await refreshSkills({ force: true });
-        setSkillsStatus("Saved.");
+        setSkillsStatus(translate("skills.saved"));
       } catch (e) {
         const message = e instanceof Error ? e.message : translate("skills.unknown_error");
         options.setError(addOpencodeCacheHint(message));
@@ -983,7 +990,7 @@ export function createExtensionsStore(options: {
     }
 
     if (isRemoteWorkspace) {
-      setSkillsStatus("OpenWork server unavailable. Connect to edit skills.");
+      setSkillsStatus(translate("skills.connect_host_to_edit"));
       return;
     }
 
@@ -993,7 +1000,7 @@ export function createExtensionsStore(options: {
     }
 
     if (!isLocalWorkspace) {
-      setSkillsStatus("Local workers are required to edit skills.");
+      setSkillsStatus(translate("skills.local_workers_required_edit"));
       return;
     }
 
@@ -1005,7 +1012,7 @@ export function createExtensionsStore(options: {
       if (!result.ok) {
         setSkillsStatus(result.stderr || result.stdout || translate("skills.unknown_error"));
       } else {
-        setSkillsStatus(result.stdout || "Saved.");
+        setSkillsStatus(result.stdout || translate("skills.saved"));
         options.markReloadRequired?.("skills", { type: "skill", name: trimmed, action: "updated" });
       }
       await refreshSkills({ force: true });

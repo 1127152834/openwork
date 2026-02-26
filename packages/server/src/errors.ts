@@ -13,6 +13,10 @@ export class ApiError extends Error {
   }
 }
 
+export function apiError(status: number, code: string, message: string, details?: unknown): ApiError {
+  return Reflect.construct(ApiError, [status, code, message, details]) as ApiError;
+}
+
 export function formatError(err: ApiError): ApiErrorBody {
   return {
     code: err.code,

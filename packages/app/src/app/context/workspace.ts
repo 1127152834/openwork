@@ -448,15 +448,15 @@ export function createWorkspaceStore(options: {
     } catch (error) {
       if (error instanceof OpenworkServerError && (error.status === 401 || error.status === 403)) {
         if (!trimmedToken) {
-          throw new Error("Access token required for OpenWork server.");
+          throw new Error(t("workspace.openwork_access_token_required", currentLocale()));
         }
-        throw new Error("OpenWork server rejected the access token.");
+        throw new Error(t("workspace.openwork_access_token_rejected", currentLocale()));
       }
       return { kind: "fallback" as const };
     }
 
     if (!trimmedToken) {
-      throw new Error("Access token required for OpenWork server.");
+      throw new Error(t("workspace.openwork_access_token_required", currentLocale()));
     }
 
     const response = await client.listWorkspaces();
@@ -475,7 +475,7 @@ export function createWorkspaceStore(options: {
       ? (items.find((item) => item?.id && selectById(item as any)) as OpenworkWorkspaceInfo | undefined)
       : undefined;
     if (requestedWorkspaceId && !workspaceById) {
-      throw new Error("OpenWork worker not found on that host.");
+      throw new Error(t("workspace.openwork_worker_not_found", currentLocale()));
     }
 
     const workspaceByHint = hint
@@ -484,11 +484,11 @@ export function createWorkspaceStore(options: {
 
     const workspace = (workspaceById ?? workspaceByHint ?? items[0]) as OpenworkWorkspaceInfo | undefined;
     if (!workspace?.id) {
-      throw new Error("OpenWork server did not return a worker.");
+      throw new Error(t("workspace.openwork_worker_missing", currentLocale()));
     }
     const opencodeUpstreamBaseUrl = workspace.opencode?.baseUrl?.trim() ?? workspace.baseUrl?.trim() ?? "";
     if (!opencodeUpstreamBaseUrl) {
-      throw new Error("OpenWork server did not provide an OpenCode URL.");
+      throw new Error(t("workspace.openwork_missing_opencode_url", currentLocale()));
     }
 
     const workspaceScopedBaseUrl =
@@ -1420,7 +1420,7 @@ export function createWorkspaceStore(options: {
         return;
       }
 
-      const name = resolvedFolder.replace(/\\/g, "/").split("/").filter(Boolean).pop() ?? "Worker";
+      const name = resolvedFolder.replace(/\\/g, "/").split("/").filter(Boolean).pop() ?? t("workspace.default_name", currentLocale());
       const ws = await workspaceCreate({ folderPath: resolvedFolder, name, preset });
       setWorkspaces(ws.workspaces);
       syncActiveWorkspaceId(ws.activeId);
@@ -1479,15 +1479,15 @@ export function createWorkspaceStore(options: {
     setSandboxCreateProgress({
       runId,
       startedAt,
-      stage: "Checking Docker...",
+      stage: t("workspace.sandbox_stage_checking_docker", currentLocale()),
       error: null,
       logs: [],
       steps: [
-        { key: "docker", label: "Docker ready", status: "active", detail: null },
-        { key: "workspace", label: "Prepare worker", status: "pending", detail: null },
-        { key: "sandbox", label: "Start sandbox services", status: "pending", detail: null },
-        { key: "health", label: "Wait for OpenWork", status: "pending", detail: null },
-        { key: "connect", label: "Connect in OpenWork", status: "pending", detail: null },
+        { key: "docker", label: t("workspace.sandbox_step_docker_ready", currentLocale()), status: "active", detail: null },
+        { key: "workspace", label: t("workspace.sandbox_step_prepare_worker", currentLocale()), status: "pending", detail: null },
+        { key: "sandbox", label: t("workspace.sandbox_step_start_services", currentLocale()), status: "pending", detail: null },
+        { key: "health", label: t("workspace.sandbox_step_wait_openwork", currentLocale()), status: "pending", detail: null },
+        { key: "connect", label: t("workspace.sandbox_step_connect_openwork", currentLocale()), status: "pending", detail: null },
       ],
     });
 
@@ -1514,11 +1514,11 @@ export function createWorkspaceStore(options: {
     if (!doctor?.ready) {
       const detail =
         doctor?.error?.trim() ||
-        "Docker is required for sandboxes. Install Docker Desktop, start it, then retry.";
+        t("workspace.sandbox_docker_required_detail", currentLocale());
       options.setError(detail);
       setSandboxStep("docker", { status: "error", detail });
       setSandboxError(detail);
-      setSandboxStage("Docker not ready");
+      setSandboxStage(t("workspace.sandbox_stage_docker_not_ready", currentLocale()));
       options.setBusy(false);
       options.setBusyLabel(null);
       options.setBusyStartedAt(null);
@@ -1526,18 +1526,18 @@ export function createWorkspaceStore(options: {
       return false;
     }
     setSandboxStep("docker", { status: "done", detail: doctor.serverVersion ?? null });
-    setSandboxStage("Preparing worker...");
+    setSandboxStage(t("workspace.sandbox_stage_preparing_worker", currentLocale()));
 
     try {
       const resolvedFolder = await resolveWorkspacePath(folder);
       if (!resolvedFolder) {
         options.setError(t("app.error.choose_folder", currentLocale()));
-        setSandboxStep("workspace", { status: "error", detail: "No folder selected" });
-        setSandboxError("No folder selected");
+        setSandboxStep("workspace", { status: "error", detail: t("workspace.sandbox_no_folder_selected", currentLocale()) });
+        setSandboxError(t("workspace.sandbox_no_folder_selected", currentLocale()));
         return false;
       }
 
-      const name = resolvedFolder.replace(/\\/g, "/").split("/").filter(Boolean).pop() ?? "Worker";
+      const name = resolvedFolder.replace(/\\/g, "/").split("/").filter(Boolean).pop() ?? t("workspace.default_name", currentLocale());
 
       setSandboxStep("workspace", { status: "active", detail: name });
       pushSandboxCreateLog(`Worker: ${resolvedFolder}`);
@@ -1558,7 +1558,7 @@ export function createWorkspaceStore(options: {
       }
 
       setSandboxStep("sandbox", { status: "active", detail: null });
-      setSandboxStage("Starting sandbox services...");
+      setSandboxStage(t("workspace.sandbox_stage_starting_services", currentLocale()));
 
       let stopListen: (() => void) | null = null;
       try {
@@ -1577,7 +1577,8 @@ export function createWorkspaceStore(options: {
             if (stage === "docker.container") {
               const state = String(payload.payload?.containerState ?? "").trim();
               if (state) {
-                setSandboxStep("sandbox", { status: "active", detail: `Container: ${state}` });
+                const detail = t("workspace.sandbox_container_state", currentLocale()).replace("{state}", state);
+                setSandboxStep("sandbox", { status: "active", detail });
               }
             }
 
@@ -1597,7 +1598,7 @@ export function createWorkspaceStore(options: {
             if (stage === "docker.inspect") {
               const inspectError = String(payload.payload?.error ?? "").trim();
               if (inspectError) {
-                setSandboxStep("sandbox", { status: "active", detail: "Docker inspect warning" });
+                setSandboxStep("sandbox", { status: "active", detail: t("workspace.sandbox_docker_inspect_warning", currentLocale()) });
                 pushSandboxCreateLog(`docker inspect warning: ${inspectError}`);
               }
             }
@@ -1618,7 +1619,7 @@ export function createWorkspaceStore(options: {
             }
 
             if (stage === "error") {
-              const err = String(payload.payload?.error ?? "").trim() || message || "Sandbox failed to start";
+              const err = String(payload.payload?.error ?? "").trim() || message || t("workspace.sandbox_failed_to_start", currentLocale());
               setSandboxStep("sandbox", { status: "error", detail: err });
               setSandboxStep("health", { status: "error", detail: err });
               setSandboxError(err);
@@ -1633,7 +1634,7 @@ export function createWorkspaceStore(options: {
         });
         setSandboxStep("sandbox", { status: "done", detail: host.sandboxContainerName ?? null });
         setSandboxStep("health", { status: "done" });
-        setSandboxStage("Connecting to sandbox...");
+        setSandboxStage(t("workspace.sandbox_stage_connecting", currentLocale()));
 
         setSandboxStep("connect", { status: "active", detail: null });
 
@@ -1651,7 +1652,7 @@ export function createWorkspaceStore(options: {
           closeModal: false,
         });
         if (!ok) {
-          const fallback = "Failed to connect to sandbox";
+          const fallback = t("workspace.sandbox_connect_failed", currentLocale());
           pushSandboxCreateLog(fallback);
           setSandboxStep("connect", { status: "error", detail: fallback });
           setSandboxError(fallback);
@@ -1660,14 +1661,14 @@ export function createWorkspaceStore(options: {
 
         if (input?.onReady) {
           setSandboxCreatePhase("finalizing");
-          setSandboxStage("Opening session...");
-          setSandboxStep("connect", { status: "active", detail: "Opening session" });
+          setSandboxStage(t("workspace.sandbox_stage_opening_session", currentLocale()));
+          setSandboxStep("connect", { status: "active", detail: t("workspace.sandbox_opening_session", currentLocale()) });
           pushSandboxCreateLog("Opening session in new worker...");
           await input.onReady();
         }
 
         setSandboxStep("connect", { status: "done", detail: null });
-        setSandboxStage("Sandbox ready.");
+        setSandboxStage(t("workspace.sandbox_stage_ready", currentLocale()));
         setCreateWorkspaceOpen(false);
         clearSandboxCreateProgress();
         return true;
@@ -1678,7 +1679,7 @@ export function createWorkspaceStore(options: {
       const message = e instanceof Error ? e.message : safeStringify(e);
       options.setError(addOpencodeCacheHint(message));
       setSandboxError(message);
-      setSandboxStage("Sandbox failed");
+      setSandboxStage(t("workspace.sandbox_stage_failed", currentLocale()));
       return false;
     } finally {
       setSandboxPreflightBusy(false);
@@ -2166,16 +2167,16 @@ export function createWorkspaceStore(options: {
 
     const targetId = workspaceId?.trim() || activeWorkspaceInfo()?.id || "";
     if (!targetId) {
-      options.setError("Select a worker to export");
+      options.setError(t("workspace.export_select_worker", currentLocale()));
       return;
     }
     const target = workspaces().find((ws) => ws.id === targetId) ?? null;
     if (!target) {
-      options.setError("Unknown worker");
+      options.setError(t("workspace.export_unknown_worker", currentLocale()));
       return;
     }
     if (target.workspaceType === "remote") {
-      options.setError("Export is only supported for local workers");
+      options.setError(t("workspace.export_local_only", currentLocale()));
       return;
     }
 
@@ -2194,9 +2195,9 @@ export function createWorkspaceStore(options: {
       const defaultPath = downloads ? `${downloads}/${fileName}` : fileName;
 
       const outputPath = await saveFile({
-        title: "Export worker config",
+        title: t("workspace.export_title", currentLocale()),
         defaultPath,
-        filters: [{ name: "OpenWork Worker", extensions: ["openwork-workspace", "zip"] }],
+        filters: [{ name: t("workspace.file_filter_worker", currentLocale()), extensions: ["openwork-workspace", "zip"] }],
       });
 
       if (!outputPath) {
@@ -2227,15 +2228,15 @@ export function createWorkspaceStore(options: {
 
     try {
       const selection = await pickFile({
-        title: "Import worker config",
-        filters: [{ name: "OpenWork Worker", extensions: ["openwork-workspace", "zip"] }],
+        title: t("workspace.import_title", currentLocale()),
+        filters: [{ name: t("workspace.file_filter_worker", currentLocale()), extensions: ["openwork-workspace", "zip"] }],
       });
       const filePath =
         typeof selection === "string" ? selection : Array.isArray(selection) ? selection[0] : null;
       if (!filePath) return;
 
       const target = await pickDirectory({
-        title: "Choose a worker folder",
+        title: t("workspace.choose_worker_folder_title", currentLocale()),
       });
       const folder =
         typeof target === "string" ? target : Array.isArray(target) ? target[0] : null;

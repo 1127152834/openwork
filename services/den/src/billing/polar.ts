@@ -35,6 +35,16 @@ type CloudAccessInput = {
   name: string
 }
 
+const POLAR_GATE_ENABLED = "POLAR_FEATURE_GATE_ENABLED=true"
+
+function requiredPolarEnv(name: string): string {
+  return `${name} is required when ${POLAR_GATE_ENABLED}`
+}
+
+function missingCheckoutUrlMessage(): string {
+  return "Polar checkout response is missing URL"
+}
+
 function sanitizeApiBase(value: string) {
   return value.replace(/\/+$/, "")
 }
@@ -63,19 +73,19 @@ async function polarFetch(path: string, init: RequestInit = {}) {
 
 function assertPaywallConfig() {
   if (!env.polar.accessToken) {
-    throw new Error("POLAR_ACCESS_TOKEN is required when POLAR_FEATURE_GATE_ENABLED=true")
+    throw new Error(requiredPolarEnv("POLAR_ACCESS_TOKEN"))
   }
   if (!env.polar.productId) {
-    throw new Error("POLAR_PRODUCT_ID is required when POLAR_FEATURE_GATE_ENABLED=true")
+    throw new Error(requiredPolarEnv("POLAR_PRODUCT_ID"))
   }
   if (!env.polar.benefitId) {
-    throw new Error("POLAR_BENEFIT_ID is required when POLAR_FEATURE_GATE_ENABLED=true")
+    throw new Error(requiredPolarEnv("POLAR_BENEFIT_ID"))
   }
   if (!env.polar.successUrl) {
-    throw new Error("POLAR_SUCCESS_URL is required when POLAR_FEATURE_GATE_ENABLED=true")
+    throw new Error(requiredPolarEnv("POLAR_SUCCESS_URL"))
   }
   if (!env.polar.returnUrl) {
-    throw new Error("POLAR_RETURN_URL is required when POLAR_FEATURE_GATE_ENABLED=true")
+    throw new Error(requiredPolarEnv("POLAR_RETURN_URL"))
   }
 }
 
@@ -184,7 +194,7 @@ async function createCheckoutSession(input: CloudAccessInput): Promise<string> {
 
   const checkout = text ? (JSON.parse(text) as PolarCheckoutSession) : null
   if (!checkout?.url) {
-    throw new Error("Polar checkout response missing URL")
+    throw new Error(missingCheckoutUrlMessage())
   }
 
   return checkout.url

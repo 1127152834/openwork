@@ -1,6 +1,7 @@
 import http from "node:http";
 
 import type { Logger } from "pino";
+import { resolveRouterLangFromRequest, routerText, type RouterTextKey } from "./i18n.js";
 
 export type HealthSnapshot = {
   ok: boolean;
@@ -148,6 +149,13 @@ export async function startHealthServer(
   handlers: HealthHandlers = {},
 ) {
   const server = http.createServer((req, res) => {
+    const lang = resolveRouterLangFromRequest(req);
+    const tr = (key: RouterTextKey) => routerText(key, lang);
+    const writeJsonError = (status: number, key: RouterTextKey) => {
+      res.writeHead(status, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: tr(key) }));
+    };
+
     void (async () => {
       const requestOrigin = req.headers.origin;
       if (requestOrigin) {
@@ -191,8 +199,7 @@ export async function startHealthServer(
       // Legacy alias: POST /config/telegram-token -> upsert telegram identity "default".
       if (pathname === "/config/telegram-token" && req.method === "POST") {
         if (!handlers.upsertTelegramIdentity) {
-          res.writeHead(404, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: "Not supported" }));
+          writeJsonError(404, "not_supported");
           return;
         }
 
@@ -200,8 +207,7 @@ export async function startHealthServer(
         for await (const chunk of req) {
           raw += chunk.toString();
           if (raw.length > 1024 * 1024) {
-            res.writeHead(413, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ ok: false, error: "Payload too large" }));
+            writeJsonError(413, "payload_too_large");
             return;
           }
         }
@@ -210,8 +216,7 @@ export async function startHealthServer(
           const payload = JSON.parse(raw || "{}");
           const token = typeof payload.token === "string" ? payload.token.trim() : "";
           if (!token) {
-            res.writeHead(400, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ ok: false, error: "Token is required" }));
+            writeJsonError(400, "token_required");
             return;
           }
           const result = await handlers.upsertTelegramIdentity({ id: "default", token, enabled: true });
@@ -230,8 +235,7 @@ export async function startHealthServer(
       // Legacy alias: POST /config/slack-tokens -> upsert slack identity "default".
       if (pathname === "/config/slack-tokens" && req.method === "POST") {
         if (!handlers.upsertSlackIdentity) {
-          res.writeHead(404, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: "Not supported" }));
+          writeJsonError(404, "not_supported");
           return;
         }
 
@@ -239,8 +243,7 @@ export async function startHealthServer(
         for await (const chunk of req) {
           raw += chunk.toString();
           if (raw.length > 1024 * 1024) {
-            res.writeHead(413, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ ok: false, error: "Payload too large" }));
+            writeJsonError(413, "payload_too_large");
             return;
           }
         }
@@ -250,8 +253,7 @@ export async function startHealthServer(
           const botToken = typeof payload.botToken === "string" ? payload.botToken.trim() : "";
           const appToken = typeof payload.appToken === "string" ? payload.appToken.trim() : "";
           if (!botToken || !appToken) {
-            res.writeHead(400, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ ok: false, error: "Slack botToken and appToken are required" }));
+            writeJsonError(400, "slack_tokens_required");
             return;
           }
           const result = await handlers.upsertSlackIdentity({ id: "default", botToken, appToken, enabled: true });
@@ -271,7 +273,7 @@ export async function startHealthServer(
       if (pathname === "/identities/telegram" && req.method === "GET") {
         if (!handlers.listTelegramIdentities) {
           res.writeHead(404, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: "Not supported" }));
+          res.end(JSON.stringify({ ok: false, error: tr("not_supported") }));
           return;
         }
         try {
@@ -292,7 +294,7 @@ export async function startHealthServer(
       if (pathname === "/identities/telegram" && req.method === "POST") {
         if (!handlers.upsertTelegramIdentity) {
           res.writeHead(404, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: "Not supported" }));
+          res.end(JSON.stringify({ ok: false, error: tr("not_supported") }));
           return;
         }
         let raw = "";
@@ -300,7 +302,7 @@ export async function startHealthServer(
           raw += chunk.toString();
           if (raw.length > 1024 * 1024) {
             res.writeHead(413, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ ok: false, error: "Payload too large" }));
+            res.end(JSON.stringify({ ok: false, error: tr("payload_too_large") }));
             return;
           }
         }
@@ -314,7 +316,7 @@ export async function startHealthServer(
           const enabled = payload.enabled === undefined ? undefined : payload.enabled === true || payload.enabled === "true";
           if (!token) {
             res.writeHead(400, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ ok: false, error: "token is required" }));
+            res.end(JSON.stringify({ ok: false, error: tr("token_required_lower") }));
             return;
           }
           const result = await handlers.upsertTelegramIdentity({
@@ -341,13 +343,13 @@ export async function startHealthServer(
       if (pathname.startsWith("/identities/telegram/") && req.method === "DELETE") {
         if (!handlers.deleteTelegramIdentity) {
           res.writeHead(404, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: "Not supported" }));
+          res.end(JSON.stringify({ ok: false, error: tr("not_supported") }));
           return;
         }
         const id = pathname.slice("/identities/telegram/".length).trim();
         if (!id) {
           res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: "id is required" }));
+          res.end(JSON.stringify({ ok: false, error: tr("id_required") }));
           return;
         }
         try {
@@ -366,7 +368,7 @@ export async function startHealthServer(
       if (pathname === "/identities/slack" && req.method === "GET") {
         if (!handlers.listSlackIdentities) {
           res.writeHead(404, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: "Not supported" }));
+          res.end(JSON.stringify({ ok: false, error: tr("not_supported") }));
           return;
         }
         try {
@@ -385,7 +387,7 @@ export async function startHealthServer(
       if (pathname === "/identities/slack" && req.method === "POST") {
         if (!handlers.upsertSlackIdentity) {
           res.writeHead(404, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: "Not supported" }));
+          res.end(JSON.stringify({ ok: false, error: tr("not_supported") }));
           return;
         }
         let raw = "";
@@ -393,7 +395,7 @@ export async function startHealthServer(
           raw += chunk.toString();
           if (raw.length > 1024 * 1024) {
             res.writeHead(413, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ ok: false, error: "Payload too large" }));
+            res.end(JSON.stringify({ ok: false, error: tr("payload_too_large") }));
             return;
           }
         }
@@ -406,7 +408,7 @@ export async function startHealthServer(
           const enabled = payload.enabled === undefined ? undefined : payload.enabled === true || payload.enabled === "true";
           if (!botToken || !appToken) {
             res.writeHead(400, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ ok: false, error: "botToken and appToken are required" }));
+            res.end(JSON.stringify({ ok: false, error: tr("bot_and_app_tokens_required") }));
             return;
           }
           const result = await handlers.upsertSlackIdentity({
@@ -430,13 +432,13 @@ export async function startHealthServer(
       if (pathname.startsWith("/identities/slack/") && req.method === "DELETE") {
         if (!handlers.deleteSlackIdentity) {
           res.writeHead(404, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: "Not supported" }));
+          res.end(JSON.stringify({ ok: false, error: tr("not_supported") }));
           return;
         }
         const id = pathname.slice("/identities/slack/".length).trim();
         if (!id) {
           res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: "id is required" }));
+          res.end(JSON.stringify({ ok: false, error: tr("id_required") }));
           return;
         }
         try {
@@ -455,7 +457,7 @@ export async function startHealthServer(
       if (pathname === "/config/groups" && req.method === "GET") {
         if (!handlers.getGroupsEnabled) {
           res.writeHead(404, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: "Not supported" }));
+          res.end(JSON.stringify({ ok: false, error: tr("not_supported") }));
           return;
         }
 
@@ -469,7 +471,7 @@ export async function startHealthServer(
       if (pathname === "/config/groups" && req.method === "POST") {
         if (!handlers.setGroupsEnabled) {
           res.writeHead(404, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: "Not supported" }));
+          res.end(JSON.stringify({ ok: false, error: tr("not_supported") }));
           return;
         }
 
@@ -478,7 +480,7 @@ export async function startHealthServer(
           raw += chunk.toString();
           if (raw.length > 1024 * 1024) {
             res.writeHead(413, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ ok: false, error: "Payload too large" }));
+            res.end(JSON.stringify({ ok: false, error: tr("payload_too_large") }));
             return;
           }
         }
@@ -501,7 +503,7 @@ export async function startHealthServer(
       if (pathname === "/bindings" && req.method === "GET") {
         if (!handlers.listBindings) {
           res.writeHead(404, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: "Not supported" }));
+          res.end(JSON.stringify({ ok: false, error: tr("not_supported") }));
           return;
         }
 
@@ -526,7 +528,7 @@ export async function startHealthServer(
       if (pathname === "/bindings" && req.method === "POST") {
         if (!handlers.setBinding && !handlers.clearBinding) {
           res.writeHead(404, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: "Not supported" }));
+          res.end(JSON.stringify({ ok: false, error: tr("not_supported") }));
           return;
         }
 
@@ -535,7 +537,7 @@ export async function startHealthServer(
           raw += chunk.toString();
           if (raw.length > 1024 * 1024) {
             res.writeHead(413, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ ok: false, error: "Payload too large" }));
+            res.end(JSON.stringify({ ok: false, error: tr("payload_too_large") }));
             return;
           }
         }
@@ -549,14 +551,14 @@ export async function startHealthServer(
 
           if (!channel || !peerId) {
             res.writeHead(400, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ ok: false, error: "channel and peerId are required" }));
+            res.end(JSON.stringify({ ok: false, error: tr("channel_and_peer_required") }));
             return;
           }
 
           if (!directory) {
             if (!handlers.clearBinding) {
               res.writeHead(404, { "Content-Type": "application/json" });
-              res.end(JSON.stringify({ ok: false, error: "Not supported" }));
+              res.end(JSON.stringify({ ok: false, error: tr("not_supported") }));
               return;
             }
             await handlers.clearBinding({ channel, identityId: identityId || undefined, peerId });
@@ -567,7 +569,7 @@ export async function startHealthServer(
 
           if (!handlers.setBinding) {
             res.writeHead(404, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ ok: false, error: "Not supported" }));
+            res.end(JSON.stringify({ ok: false, error: tr("not_supported") }));
             return;
           }
           await handlers.setBinding({ channel, identityId: identityId || undefined, peerId, directory });
@@ -584,7 +586,7 @@ export async function startHealthServer(
       if (pathname === "/send" && req.method === "POST") {
         if (!handlers.sendMessage) {
           res.writeHead(404, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: "Not supported" }));
+          res.end(JSON.stringify({ ok: false, error: tr("not_supported") }));
           return;
         }
 
@@ -593,7 +595,7 @@ export async function startHealthServer(
           raw += chunk.toString();
           if (raw.length > 1024 * 1024) {
             res.writeHead(413, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ ok: false, error: "Payload too large" }));
+            res.end(JSON.stringify({ ok: false, error: tr("payload_too_large") }));
             return;
           }
         }
@@ -608,7 +610,7 @@ export async function startHealthServer(
           const text = typeof payload.text === "string" ? payload.text : "";
           if (!channel || !text.trim() || (!directory && !peerId)) {
             res.writeHead(400, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ ok: false, error: "channel, text, and either directory or peerId are required" }));
+            res.end(JSON.stringify({ ok: false, error: tr("channel_text_and_directory_or_peer_required") }));
             return;
           }
 
@@ -633,11 +635,11 @@ export async function startHealthServer(
       }
 
       res.writeHead(404, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ ok: false, error: "Not found" }));
+      res.end(JSON.stringify({ ok: false, error: tr("not_found") }));
     })().catch((error) => {
       logger.error({ error }, "health server request failed");
       res.writeHead(500, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ ok: false, error: "Internal error" }));
+      res.end(JSON.stringify({ ok: false, error: tr("internal_error") }));
     });
   });
 

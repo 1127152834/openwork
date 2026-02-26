@@ -1,6 +1,7 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 
+import { t, currentLocale } from "../../i18n";
 import { isTauriRuntime } from "../utils";
 
 type FieldsResult<T> =
@@ -38,7 +39,7 @@ async function fetchWithTimeout(
       } catch {
         // ignore
       }
-      reject(new Error("Request timed out."));
+      reject(new Error(t("openwork_server.request_timed_out", currentLocale())));
     }, timeoutMs);
   });
 
@@ -47,7 +48,7 @@ async function fetchWithTimeout(
   } catch (error) {
     const name = (error && typeof error === "object" && "name" in error ? (error as any).name : "") as string;
     if (name === "AbortError") {
-      throw new Error("Request timed out.");
+      throw new Error(t("openwork_server.request_timed_out", currentLocale()));
     }
     throw error;
   } finally {
@@ -116,7 +117,7 @@ export function unwrap<T>(result: FieldsResult<T>): NonNullable<T> {
       : typeof result.error === "string"
         ? result.error
         : JSON.stringify(result.error);
-  throw new Error(message || "Unknown error");
+  throw new Error(message || t("app.unknown_error", currentLocale()));
 }
 
 export function createClient(baseUrl: string, directory?: string, auth?: OpencodeAuth) {
@@ -156,12 +157,12 @@ export async function waitForHealthy(
       if (health.healthy) {
         return health;
       }
-      lastError = "Server reported unhealthy";
+      lastError = t("global_sync.server_unhealthy", currentLocale());
     } catch (error) {
-      lastError = error instanceof Error ? error.message : "Unknown error";
+      lastError = error instanceof Error ? error.message : t("app.unknown_error", currentLocale());
     }
     await new Promise((resolve) => setTimeout(resolve, pollMs));
   }
 
-  throw new Error(lastError ?? "Timed out waiting for server health");
+  throw new Error(lastError ?? t("openwork_server.health_wait_timed_out", currentLocale()));
 }

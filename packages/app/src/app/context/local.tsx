@@ -1,6 +1,7 @@
 import { createContext, useContext, type ParentProps } from "solid-js";
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store";
 
+import { t, currentLocale } from "../../i18n";
 import type { DashboardTab, ModelRef, View } from "../types";
 import { Persist, persisted } from "../utils/persist";
 
@@ -59,7 +60,7 @@ export function LocalProvider(props: ParentProps) {
 export function useLocal() {
   const context = useContext(LocalContext);
   if (!context) {
-    throw new Error("Local context is missing");
+    throw new Error(t("local.context_missing", currentLocale()));
   }
   return context;
 }

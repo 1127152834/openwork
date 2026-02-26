@@ -10,6 +10,7 @@ import {
   type ParentProps,
 } from "solid-js";
 
+import { t, currentLocale } from "../../i18n";
 import { usePlatform } from "./platform";
 import { useServer } from "./server";
 
@@ -166,7 +167,7 @@ export function GlobalSDKProvider(props: ParentProps) {
 export function useGlobalSDK() {
   const context = useContext(GlobalSDKContext);
   if (!context) {
-    throw new Error("Global SDK context is missing");
+    throw new Error(t("global_sdk.context_missing", currentLocale()));
   }
   return context;
 }

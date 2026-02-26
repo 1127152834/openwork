@@ -31,8 +31,46 @@ const token = () => randomBytes(32).toString("hex")
 type WorkerRow = typeof WorkerTable.$inferSelect
 type WorkerInstanceRow = typeof WorkerInstanceTable.$inferSelect
 
+const WORKER_ERROR = {
+  unauthorized: "unauthorized",
+  invalidRequest: "invalid_request",
+  workspacePathRequired: "workspace_path_required",
+  paymentRequired: "payment_required",
+  workerNotFound: "worker_not_found",
+  workerTokensUnavailable: "worker_tokens_unavailable",
+} as const
+
+const WORKER_MESSAGES = {
+  cloudPlanRequired: {
+    en: "Cloud workers require an active Den Cloud plan.",
+    zh: "云端 Worker 需要开通有效的 Den Cloud 套餐。",
+  },
+  workerTokensMissing: {
+    en: "Worker tokens are missing for this worker. Launch a new worker and try again.",
+    zh: "该 Worker 缺少 token。请重新创建 Worker 后重试。",
+  },
+} as const
+
+type WorkerLocale = "en" | "zh"
+type WorkerMessageKey = keyof typeof WORKER_MESSAGES
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null
+}
+
+function resolveWorkerLocale(req: express.Request): WorkerLocale {
+  const acceptLanguage = req.headers["accept-language"]
+  if (typeof acceptLanguage === "string") {
+    const locale = acceptLanguage.trim().toLowerCase()
+    if (locale.startsWith("zh")) return "zh"
+  }
+  const envLocale = (process.env.OPENWORK_LANG ?? "").trim().toLowerCase()
+  if (envLocale.startsWith("zh")) return "zh"
+  return "en"
+}
+
+function workerMessage(req: express.Request, key: WorkerMessageKey): string {
+  return WORKER_MESSAGES[key][resolveWorkerLocale(req)]
 }
 
 function normalizeUrl(value: string): string {
@@ -130,7 +168,7 @@ async function requireSession(req: express.Request, res: express.Response) {
     headers: fromNodeHeaders(req.headers),
   })
   if (!session?.user?.id) {
-    res.status(401).json({ error: "unauthorized" })
+    res.status(401).json({ error: WORKER_ERROR.unauthorized })
     return null
   }
   return session
@@ -257,7 +295,7 @@ workersRouter.get("/", asyncRoute(async (req, res) => {
 
   const parsed = listSchema.safeParse({ limit: req.query.limit })
   if (!parsed.success) {
-    res.status(400).json({ error: "invalid_request", details: parsed.error.flatten() })
+    res.status(400).json({ error: WORKER_ERROR.invalidRequest, details: parsed.error.flatten() })
     return
   }
 
@@ -287,12 +325,12 @@ workersRouter.post("/", asyncRoute(async (req, res) => {
 
   const parsed = createSchema.safeParse(req.body)
   if (!parsed.success) {
-    res.status(400).json({ error: "invalid_request", details: parsed.error.flatten() })
+    res.status(400).json({ error: WORKER_ERROR.invalidRequest, details: parsed.error.flatten() })
     return
   }
 
   if (parsed.data.destination === "local" && !parsed.data.workspacePath) {
-    res.status(400).json({ error: "workspace_path_required" })
+    res.status(400).json({ error: WORKER_ERROR.workspacePathRequired })
     return
   }
 
@@ -305,8 +343,8 @@ workersRouter.post("/", asyncRoute(async (req, res) => {
 
     if (!access.allowed) {
       res.status(402).json({
-        error: "payment_required",
-        message: "Cloud workers require an active Den Cloud plan.",
+        error: WORKER_ERROR.paymentRequired,
+        message: workerMessage(req, "cloudPlanRequired"),
         polar: {
           checkoutUrl: access.checkoutUrl,
           productId: env.polar.productId,
@@ -394,7 +432,7 @@ workersRouter.get("/:id", asyncRoute(async (req, res) => {
 
   const orgId = await getOrgId(session.user.id)
   if (!orgId) {
-    res.status(404).json({ error: "worker_not_found" })
+    res.status(404).json({ error: WORKER_ERROR.workerNotFound })
     return
   }
 
@@ -405,7 +443,7 @@ workersRouter.get("/:id", asyncRoute(async (req, res) => {
     .limit(1)
 
   if (rows.length === 0) {
-    res.status(404).json({ error: "worker_not_found" })
+    res.status(404).json({ error: WORKER_ERROR.workerNotFound })
     return
   }
 
@@ -423,7 +461,7 @@ workersRouter.post("/:id/tokens", asyncRoute(async (req, res) => {
 
   const orgId = await getOrgId(session.user.id)
   if (!orgId) {
-    res.status(404).json({ error: "worker_not_found" })
+    res.status(404).json({ error: WORKER_ERROR.workerNotFound })
     return
   }
 
@@ -434,7 +472,7 @@ workersRouter.post("/:id/tokens", asyncRoute(async (req, res) => {
     .limit(1)
 
   if (rows.length === 0 || rows[0].org_id !== orgId) {
-    res.status(404).json({ error: "worker_not_found" })
+    res.status(404).json({ error: WORKER_ERROR.workerNotFound })
     return
   }
 
@@ -449,8 +487,8 @@ workersRouter.post("/:id/tokens", asyncRoute(async (req, res) => {
 
   if (!hostToken || !clientToken) {
     res.status(409).json({
-      error: "worker_tokens_unavailable",
-      message: "Worker tokens are missing for this worker. Launch a new worker and try again.",
+      error: WORKER_ERROR.workerTokensUnavailable,
+      message: workerMessage(req, "workerTokensMissing"),
     })
     return
   }
@@ -473,7 +511,7 @@ workersRouter.delete("/:id", asyncRoute(async (req, res) => {
 
   const orgId = await getOrgId(session.user.id)
   if (!orgId) {
-    res.status(404).json({ error: "worker_not_found" })
+    res.status(404).json({ error: WORKER_ERROR.workerNotFound })
     return
   }
 
@@ -484,7 +522,7 @@ workersRouter.delete("/:id", asyncRoute(async (req, res) => {
     .limit(1)
 
   if (rows.length === 0) {
-    res.status(404).json({ error: "worker_not_found" })
+    res.status(404).json({ error: WORKER_ERROR.workerNotFound })
     return
   }
 

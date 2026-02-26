@@ -11,6 +11,7 @@ import { readConfigFile, writeConfigFile } from "./config.js";
 import { BridgeStore } from "./db.js";
 import { normalizeEvent } from "./events.js";
 import { startHealthServer, type HealthSnapshot } from "./health.js";
+import { resolveRouterLangFromEnv, routerText, type RouterTextKey } from "./i18n.js";
 import { buildPermissionRules, createClient } from "./opencode.js";
 import { chunkText, formatInputSummary, truncateText } from "./text.js";
 import { createSlackAdapter } from "./slack.js";
@@ -136,6 +137,9 @@ const CHANNEL_LABELS: Record<ChannelName, string> = {
   slack: "Slack",
 };
 
+const ROUTER_LANG = resolveRouterLangFromEnv();
+const tr = (key: RouterTextKey) => routerText(key, ROUTER_LANG);
+
 const TYPING_INTERVAL_MS = 6000;
 const OPENCODE_ROUTER_AGENT_FILE_RELATIVE_PATH = ".opencode/agents/opencode-router.md";
 const OPENCODE_ROUTER_AGENT_MAX_CHARS = 16_000;
@@ -188,9 +192,7 @@ function adapterKey(channel: ChannelName, identityId: string): string {
 }
 
 function invalidTelegramPeerIdError(): Error & { status?: number } {
-  const error = new Error(
-    "Telegram requires a numeric chat_id for direct targets. Usernames like @name cannot be used as peerId.",
-  ) as Error & { status?: number };
+  const error = new Error(tr("telegram_numeric_chat_id_required")) as Error & { status?: number };
   error.status = 400;
   return error;
 }
@@ -450,7 +452,7 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
 
   const resolveScopedDirectory = (input: string): { ok: true; directory: string } | { ok: false; error: string } => {
     const trimmed = input.trim();
-    if (!trimmed) return { ok: false, error: "Directory is required." };
+    if (!trimmed) return { ok: false, error: tr("directory_required") };
     const resolved = resolve(isAbsolute(trimmed) ? trimmed : join(workspaceRoot, trimmed));
     if (!isWithinWorkspaceRoot(resolved)) {
       return {
@@ -664,9 +666,9 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
           pairingCodeHash?: string;
         }) => {
           const token = input.token?.trim() ?? "";
-          if (!token) throw new Error("token is required");
+          if (!token) throw new Error(tr("token_required_lower"));
           const id = normalizeIdentityId(input.id);
-          if (id === "env") throw new Error("identity id 'env' is reserved");
+          if (id === "env") throw new Error(tr("env_identity_reserved"));
           const enabled = input.enabled !== false;
           const directoryInput = typeof input.directory === "string" ? input.directory.trim() : "";
           const requestedAccess =
@@ -695,7 +697,7 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
             const access = requestedAccess ?? existingAccess;
             const pairingCodeHash = access === "private" ? requestedPairingCodeHash || existingPairingCodeHash : "";
             if (access === "private" && !pairingCodeHash) {
-              throw new Error("pairingCodeHash is required when Telegram access is private");
+              throw new Error(tr("pairing_code_hash_required"));
             }
             nextBots.push({
               id,
@@ -710,7 +712,7 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
             const access = requestedAccess ?? "public";
             const pairingCodeHash = access === "private" ? requestedPairingCodeHash : "";
             if (access === "private" && !pairingCodeHash) {
-              throw new Error("pairingCodeHash is required when Telegram access is private");
+              throw new Error(tr("pairing_code_hash_required"));
             }
             nextBots.push({
               id,
@@ -749,7 +751,7 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
             runtimeAccess = requestedAccess ?? prevAccess;
             runtimePairingCodeHash = runtimeAccess === "private" ? requestedPairingCodeHash || prevPairingCodeHash : "";
             if (runtimeAccess === "private" && !runtimePairingCodeHash) {
-              throw new Error("pairingCodeHash is required when Telegram access is private");
+              throw new Error(tr("pairing_code_hash_required"));
             }
             config.telegramBots[existingIdx] = {
               id,
@@ -763,7 +765,7 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
             runtimeAccess = requestedAccess ?? "public";
             runtimePairingCodeHash = runtimeAccess === "private" ? requestedPairingCodeHash : "";
             if (runtimeAccess === "private" && !runtimePairingCodeHash) {
-              throw new Error("pairingCodeHash is required when Telegram access is private");
+              throw new Error(tr("pairing_code_hash_required"));
             }
             config.telegramBots.push({
               id,
@@ -860,7 +862,7 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
         },
         deleteTelegramIdentity: async (rawId: string) => {
           const id = normalizeIdentityId(rawId);
-          if (id === "env") throw new Error("env identity cannot be deleted");
+          if (id === "env") throw new Error(tr("env_identity_cannot_be_deleted"));
 
           const { config: current } = readConfigFile(config.configPath);
           const telegram = current.channels?.telegram;
@@ -922,9 +924,9 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
         upsertSlackIdentity: async (input: { id?: string; botToken: string; appToken: string; enabled?: boolean; directory?: string }) => {
           const botToken = input.botToken?.trim() ?? "";
           const appToken = input.appToken?.trim() ?? "";
-          if (!botToken || !appToken) throw new Error("botToken and appToken are required");
+          if (!botToken || !appToken) throw new Error(tr("bot_and_app_tokens_required"));
           const id = normalizeIdentityId(input.id);
-          if (id === "env") throw new Error("identity id 'env' is reserved");
+          if (id === "env") throw new Error(tr("env_identity_reserved"));
           const enabled = input.enabled !== false;
           const directoryInput = typeof input.directory === "string" ? input.directory.trim() : "";
 
@@ -1029,7 +1031,7 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
         },
         deleteSlackIdentity: async (rawId: string) => {
           const id = normalizeIdentityId(rawId);
-          if (id === "env") throw new Error("env identity cannot be deleted");
+          if (id === "env") throw new Error(tr("env_identity_cannot_be_deleted"));
 
           const { config: current } = readConfigFile(config.configPath);
           const slack = current.channels?.slack;
@@ -1083,7 +1085,7 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
             if (channelRaw === "telegram" || channelRaw === "slack") {
               channel = channelRaw as ChannelName;
             } else {
-              throw new Error("Invalid channel");
+              throw new Error(tr("invalid_channel"));
             }
           }
           const identityId = identityIdRaw ? normalizeIdentityId(identityIdRaw) : undefined;
@@ -1101,13 +1103,13 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
         setBinding: async (input: { channel: string; identityId?: string; peerId: string; directory: string }) => {
           const channel = input.channel.trim().toLowerCase();
           if (channel !== "telegram" && channel !== "slack") {
-            throw new Error("Invalid channel");
+            throw new Error(tr("invalid_channel"));
           }
           const identityId = normalizeIdentityId(input.identityId);
           const peerKey = input.peerId.trim();
           const directory = input.directory.trim();
           if (!peerKey || !directory) {
-            throw new Error("peerId and directory are required");
+            throw new Error(tr("peer_and_directory_required"));
           }
           if (channel === "telegram" && !isTelegramPeerId(peerKey)) {
             throw invalidTelegramPeerIdError();
@@ -1126,12 +1128,12 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
         clearBinding: async (input: { channel: string; identityId?: string; peerId: string }) => {
           const channel = input.channel.trim().toLowerCase();
           if (channel !== "telegram" && channel !== "slack") {
-            throw new Error("Invalid channel");
+            throw new Error(tr("invalid_channel"));
           }
           const identityId = normalizeIdentityId(input.identityId);
           const peerKey = input.peerId.trim();
           if (!peerKey) {
-            throw new Error("peerId is required");
+            throw new Error(tr("peer_required"));
           }
           store.deleteBinding(channel as ChannelName, identityId, peerKey);
           store.deleteSession(channel as ChannelName, identityId, peerKey);
@@ -1147,7 +1149,7 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
         }) => {
           const channelRaw = input.channel.trim().toLowerCase();
           if (channelRaw !== "telegram" && channelRaw !== "slack") {
-            throw new Error("Invalid channel");
+            throw new Error(tr("invalid_channel"));
           }
           const channel = channelRaw as ChannelName;
           const identityId = input.identityId?.trim() ? normalizeIdentityId(input.identityId) : undefined;
@@ -1156,11 +1158,11 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
           const autoBind = input.autoBind === true;
           const text = input.text ?? "";
           if (!text.trim()) {
-            throw new Error("text is required");
+            throw new Error(tr("text_required"));
           }
 
           if (!directoryInput && !peerId) {
-            throw new Error("directory or peerId is required");
+            throw new Error(tr("directory_or_peer_required"));
           }
           if (channel === "telegram" && peerId && !isTelegramPeerId(peerId)) {
             throw invalidTelegramPeerIdError();
@@ -1212,7 +1214,7 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
                 peerId,
                 attempted: 1,
                 sent: 0,
-                failures: [{ identityId: targetIdentityId, peerId, error: "Adapter not running" }],
+                failures: [{ identityId: targetIdentityId, peerId, error: tr("adapter_not_running") }],
               };
             }
 
@@ -1276,7 +1278,7 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
               failures.push({
                 identityId: binding.identity_id,
                 peerId: binding.peer_id,
-                error: "Invalid Telegram peerId binding removed (expected numeric chat_id)",
+                error: tr("invalid_telegram_peer_binding_removed"),
               });
               continue;
             }
@@ -1285,7 +1287,7 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
               failures.push({
                 identityId: binding.identity_id,
                 peerId: binding.peer_id,
-                error: "Adapter not running",
+                error: tr("adapter_not_running"),
               });
               continue;
             }
@@ -1689,7 +1691,7 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
           "Follow these workspace messaging instructions:",
           effectiveInstructions,
           "",
-          "Incoming user message:",
+          tr("incoming_user_message"),
           inbound.text,
         ].join("\n");
         logger.debug(
@@ -1939,7 +1941,7 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
       permission: buildPermissionRules(config.permissionMode),
     });
     const sessionID = (session as { id?: string }).id;
-    if (!sessionID) throw new Error("Failed to create session");
+    if (!sessionID) throw new Error(tr("failed_create_session"));
     store.upsertSession(input.channel, input.identityId, input.peerKey, sessionID, input.directory);
     logger.info(
       { sessionID, channel: input.channel, identityId: input.identityId, peerId: input.peerKey, directory: input.directory },

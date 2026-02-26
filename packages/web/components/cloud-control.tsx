@@ -63,8 +63,72 @@ type LaunchEvent = {
 
 function getAuthInfoForMode(mode: AuthMode): string {
   return mode === "sign-up"
-    ? "Create an account to launch and manage cloud workers."
-    : "Sign in to launch and manage cloud workers.";
+    ? uiText("Create an account to launch and manage cloud workers.", "创建账号以启动和管理云端 Worker。")
+    : uiText("Sign in to launch and manage cloud workers.", "登录以启动和管理云端 Worker。");
+}
+
+const CLOUD_CONTROL_COPY = {
+  en: {
+    no_active_session_sign_in: "No active session found. Sign in first.",
+    session_response_missing_user: "Session response did not include a user.",
+    github_signin_no_redirect: "GitHub sign-in did not return a redirect URL.",
+    sign_in_before_launch: "Sign in before launching a worker.",
+    launch_missing_worker_details: "Launch response was missing worker details.",
+    sign_in_before_status: "Sign in before checking worker status.",
+    launch_worker_first_status_panel: "No worker selected yet. Launch one first, then use this panel.",
+    status_missing_worker_details: "Status response was missing worker details.",
+    sign_in_before_fetch_token: "Sign in before fetching a worker access token.",
+    launch_worker_first_fetch_token: "No worker selected yet. Launch one first, then fetch a token.",
+    token_response_missing_values: "Token response returned no token values.",
+    sign_in_before_delete: "Sign in before deleting a worker.",
+    search_placeholder: "Search...",
+    url_appears_ready: "URL appears once ready",
+    use_worker_actions_refresh: "Use Worker actions to refresh",
+    host_url: "Host URL",
+    worker_id: "Worker ID"
+  },
+  zh: {
+    no_active_session_sign_in: "未找到有效会话，请先登录。",
+    session_response_missing_user: "会话响应中缺少用户信息。",
+    github_signin_no_redirect: "GitHub 登录未返回重定向 URL。",
+    sign_in_before_launch: "请先登录再启动工作区。",
+    launch_missing_worker_details: "启动响应缺少工作区详情。",
+    sign_in_before_status: "请先登录再检查工作区状态。",
+    launch_worker_first_status_panel: "尚未选择工作区。请先启动一个工作区，再使用此面板。",
+    status_missing_worker_details: "状态响应缺少工作区详情。",
+    sign_in_before_fetch_token: "请先登录再获取工作区访问令牌。",
+    launch_worker_first_fetch_token: "尚未选择工作区。请先启动一个工作区，再获取令牌。",
+    token_response_missing_values: "令牌响应未返回任何令牌值。",
+    sign_in_before_delete: "请先登录再删除工作区。",
+    search_placeholder: "搜索...",
+    url_appears_ready: "就绪后会显示 URL",
+    use_worker_actions_refresh: "使用 Worker 操作进行刷新",
+    host_url: "主机 URL",
+    worker_id: "工作区 ID"
+  }
+} as const;
+
+type CloudControlCopyKey = keyof (typeof CLOUD_CONTROL_COPY)["en"];
+
+function getCloudControlLocale(): "en" | "zh" {
+  if (typeof document !== "undefined") {
+    const langAttr = document.documentElement.lang?.trim().toLowerCase();
+    if (langAttr.startsWith("zh")) return "zh";
+  }
+  if (typeof navigator !== "undefined") {
+    const navLang = navigator.language?.trim().toLowerCase();
+    if (navLang.startsWith("zh")) return "zh";
+  }
+  return "en";
+}
+
+function cloudText(key: CloudControlCopyKey): string {
+  const locale = getCloudControlLocale();
+  return CLOUD_CONTROL_COPY[locale][key] ?? CLOUD_CONTROL_COPY.en[key];
+}
+
+function uiText(en: string, zh: string): string {
+  return getCloudControlLocale() === "zh" ? zh : en;
 }
 
 const LAST_WORKER_STORAGE_KEY = "openwork:web:last-worker";
@@ -97,10 +161,10 @@ function getErrorMessage(payload: unknown, fallback: string): string {
     const trimmed = payload.trim();
     const lower = trimmed.toLowerCase();
     if (lower.startsWith("<!doctype") || lower.startsWith("<html") || lower.includes("<body")) {
-      return `${fallback} Upstream returned an HTML error page.`;
+      return `${fallback} ${uiText("Upstream returned an HTML error page.", "上游返回了 HTML 错误页。")}`;
     }
     if (trimmed.length > 240) {
-      return `${fallback} Upstream returned a non-JSON error payload.`;
+      return `${fallback} ${uiText("Upstream returned a non-JSON error payload.", "上游返回了非 JSON 错误载荷。")}`;
     }
     return trimmed;
   }
@@ -265,18 +329,18 @@ function getWorkerStatusMeta(status: string): { label: string; bucket: WorkerSta
   const normalized = status.trim().toLowerCase();
 
   if (normalized === "healthy" || normalized === "ready") {
-    return { label: "Ready", bucket: "ready" };
+    return { label: uiText("Ready", "就绪"), bucket: "ready" };
   }
 
   if (normalized === "provisioning" || normalized === "starting") {
-    return { label: "Starting", bucket: "starting" };
+    return { label: uiText("Starting", "启动中"), bucket: "starting" };
   }
 
   if (normalized === "failed" || normalized === "suspended" || normalized === "stopped") {
-    return { label: "Needs attention", bucket: "attention" };
+    return { label: uiText("Needs attention", "需关注"), bucket: "attention" };
   }
 
-  return { label: "Unknown", bucket: "other" };
+  return { label: uiText("Unknown", "未知"), bucket: "other" };
 }
 
 function getWorkerStatusCopy(status: string): string {
@@ -284,17 +348,17 @@ function getWorkerStatusCopy(status: string): string {
   switch (normalized) {
     case "provisioning":
     case "starting":
-      return "Starting... This may take a minute.";
+      return uiText("Starting... This may take a minute.", "启动中... 可能需要一分钟。");
     case "healthy":
     case "ready":
-      return "Ready to connect.";
+      return uiText("Ready to connect.", "已可连接。");
     case "failed":
-      return "Worker failed to start.";
+      return uiText("Worker failed to start.", "Worker 启动失败。");
     case "suspended":
     case "stopped":
-      return "Worker is suspended.";
+      return uiText("Worker is suspended.", "Worker 已暂停。");
     default:
-      return "Worker status unknown.";
+      return uiText("Worker status unknown.", "Worker 状态未知。");
   }
 }
 
@@ -646,7 +710,7 @@ export function CloudControlPanel() {
   const [workersError, setWorkersError] = useState<string | null>(null);
   const [launchBusy, setLaunchBusy] = useState(false);
   const [actionBusy, setActionBusy] = useState<"status" | "token" | null>(null);
-  const [launchStatus, setLaunchStatus] = useState("Name your worker and click launch.");
+  const [launchStatus, setLaunchStatus] = useState(uiText("Name your worker and click launch.", "为 Worker 命名后点击启动。"));
   const [launchError, setLaunchError] = useState<string | null>(null);
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [paymentReturned, setPaymentReturned] = useState(false);
@@ -766,7 +830,7 @@ export function CloudControlPanel() {
       }
     } catch {
       if (!options.quiet) {
-        appendEvent("warning", "Credential hint", "Could not resolve /w/ws_ URL yet. Using host URL fallback.");
+        appendEvent("warning", uiText("Credential hint", "凭据提示"), uiText("Could not resolve /w/ws_ URL yet. Using host URL fallback.", "暂时无法解析 /w/ws_ URL，已回退到主机 URL。"));
       }
     }
 
@@ -794,7 +858,7 @@ export function CloudControlPanel() {
       });
 
       if (!response.ok) {
-        const message = getErrorMessage(payload, `Failed to load workers (${response.status}).`);
+        const message = getErrorMessage(payload, `${uiText("Failed to load workers", "加载 Worker 失败")} (${response.status}).`);
         setWorkersError(message);
         return;
       }
@@ -817,7 +881,7 @@ export function CloudControlPanel() {
         }
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown network error";
+      const message = error instanceof Error ? error.message : uiText("Unknown network error", "未知网络错误");
       setWorkersError(message);
     } finally {
       setWorkersBusy(false);
@@ -847,7 +911,7 @@ export function CloudControlPanel() {
     if (!response.ok) {
       setUser(null);
       if (!quiet) {
-        setAuthError("No active session found. Sign in first.");
+        setAuthError(cloudText("no_active_session_sign_in"));
       }
       return null;
     }
@@ -855,13 +919,13 @@ export function CloudControlPanel() {
     const sessionUser = getUser(payload);
     if (!sessionUser) {
       if (!quiet) {
-        setAuthError("Session response did not include a user.");
+        setAuthError(cloudText("session_response_missing_user"));
       }
       return null;
     }
 
     setUser(sessionUser);
-    setAuthInfo(`Signed in as ${sessionUser.email}.`);
+    setAuthInfo(`${uiText("Signed in as", "当前登录")} ${sessionUser.email}.`);
     return sessionUser;
   }
 
@@ -892,8 +956,8 @@ export function CloudControlPanel() {
 
     setPaymentReturned(true);
     setCheckoutUrl(null);
-    setLaunchStatus("Checkout return detected. Click launch to continue worker provisioning.");
-    appendEvent("success", "Returned from checkout", `Session ${shortValue(customerSessionToken)}`);
+    setLaunchStatus(uiText("Checkout return detected. Click launch to continue worker provisioning.", "检测到支付返回，点击启动即可继续创建 Worker。"));
+    appendEvent("success", uiText("Returned from checkout", "已从支付页面返回"), `Session ${shortValue(customerSessionToken)}`);
 
     params.delete("customer_session_token");
     const nextQuery = params.toString();
@@ -927,8 +991,8 @@ export function CloudControlPanel() {
 
       setWorker(restored);
       setWorkerLookupId(restored.workerId);
-      setLaunchStatus(`Recovered worker ${restored.workerName}. ${getWorkerStatusCopy(restored.status)}`);
-      appendEvent("info", "Recovered worker context", `Worker ID ${restored.workerId}`);
+      setLaunchStatus(`${uiText("Recovered worker", "已恢复 Worker")} ${restored.workerName}. ${getWorkerStatusCopy(restored.status)}`);
+      appendEvent("info", uiText("Recovered worker context", "已恢复 Worker 上下文"), `Worker ID ${restored.workerId}`);
     } catch {
       return;
     }
@@ -1040,7 +1104,7 @@ export function CloudControlPanel() {
       });
 
       if (!response.ok) {
-        setAuthError(getErrorMessage(payload, `Authentication failed with ${response.status}.`));
+        setAuthError(getErrorMessage(payload, `${uiText("Authentication failed", "认证失败")} ${response.status}.`));
         return;
       }
 
@@ -1052,20 +1116,20 @@ export function CloudControlPanel() {
       const payloadUser = getUser(payload);
       if (payloadUser) {
         setUser(payloadUser);
-        setAuthInfo(`Signed in as ${payloadUser.email}.`);
-        appendEvent("success", authMode === "sign-up" ? "Account created" : "Signed in", payloadUser.email);
+        setAuthInfo(`${uiText("Signed in as", "当前登录")} ${payloadUser.email}.`);
+        appendEvent("success", authMode === "sign-up" ? uiText("Account created", "账号已创建") : uiText("Signed in", "已登录"), payloadUser.email);
       } else {
         const refreshed = await refreshSession(true);
         if (!refreshed) {
-          setAuthInfo("Authentication succeeded, but session details are still syncing.");
+          setAuthInfo(uiText("Authentication succeeded, but session details are still syncing.", "认证成功，但会话信息仍在同步。"));
         } else {
-          appendEvent("success", authMode === "sign-up" ? "Account created" : "Signed in", refreshed.email);
+          appendEvent("success", authMode === "sign-up" ? uiText("Account created", "账号已创建") : uiText("Signed in", "已登录"), refreshed.email);
         }
       }
 
       setStep(2);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown network error";
+      const message = error instanceof Error ? error.message : uiText("Unknown network error", "未知网络错误");
       setAuthError(message);
     } finally {
       setAuthBusy(false);
@@ -1079,7 +1143,7 @@ export function CloudControlPanel() {
 
     setAuthBusy(true);
     setAuthError(null);
-    setAuthInfo("Redirecting to GitHub...");
+    setAuthInfo(uiText("Redirecting to GitHub...", "正在跳转到 GitHub..."));
 
     try {
       const callbackURL = getGithubCallbackUrl();
@@ -1094,7 +1158,7 @@ export function CloudControlPanel() {
 
       if (!response.ok) {
         setAuthInfo(getAuthInfoForMode(authMode));
-        setAuthError(getErrorMessage(payload, `GitHub sign-in failed with ${response.status}.`));
+        setAuthError(getErrorMessage(payload, `${uiText("GitHub sign-in failed", "GitHub 登录失败")} ${response.status}.`));
         setAuthBusy(false);
         return;
       }
@@ -1105,14 +1169,14 @@ export function CloudControlPanel() {
 
       if (!redirectUrl) {
         setAuthInfo(getAuthInfoForMode(authMode));
-        setAuthError("GitHub sign-in did not return a redirect URL.");
+        setAuthError(cloudText("github_signin_no_redirect"));
         setAuthBusy(false);
         return;
       }
 
       window.location.assign(redirectUrl);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown network error";
+      const message = error instanceof Error ? error.message : uiText("Unknown network error", "未知网络错误");
       setAuthInfo(getAuthInfoForMode(authMode));
       setAuthError(message);
       setAuthBusy(false);
@@ -1161,7 +1225,7 @@ export function CloudControlPanel() {
     setEmail("");
     setPassword("");
     setAuthInfo(getAuthInfoForMode("sign-up"));
-    setLaunchStatus("Name your worker and click launch.");
+    setLaunchStatus(uiText("Name your worker and click launch.", "为 Worker 命名后点击启动。"));
     setEvents([]);
 
     if (typeof window !== "undefined") {
@@ -1171,15 +1235,15 @@ export function CloudControlPanel() {
 
   async function handleLaunchWorker() {
     if (!user) {
-      setAuthError("Sign in before launching a worker.");
+      setAuthError(cloudText("sign_in_before_launch"));
       return;
     }
 
     setLaunchBusy(true);
     setLaunchError(null);
     setCheckoutUrl(null);
-    setLaunchStatus("Checking subscription and launch eligibility...");
-    appendEvent("info", "Launch requested", workerName.trim() || "Cloud worker");
+    setLaunchStatus(uiText("Checking subscription and launch eligibility...", "正在检查订阅与启动资格..."));
+    appendEvent("info", uiText("Launch requested", "已请求启动"), workerName.trim() || uiText("Cloud worker", "云端 Worker"));
 
     try {
       const { response, payload } = await requestJson(
@@ -1188,7 +1252,7 @@ export function CloudControlPanel() {
           method: "POST",
           headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
           body: JSON.stringify({
-            name: workerName.trim() || "Cloud Worker",
+            name: workerName.trim() || uiText("Cloud Worker", "云端 Worker"),
             destination: "cloud"
           })
         },
@@ -1198,25 +1262,25 @@ export function CloudControlPanel() {
       if (response.status === 402) {
         const url = getCheckoutUrl(payload);
         setCheckoutUrl(url);
-        setLaunchStatus("Payment is required. Complete checkout and return to continue launch.");
-        setLaunchError(url ? null : "Checkout URL missing from paywall response.");
-        appendEvent("warning", "Paywall required", url ? "Checkout URL generated" : "Checkout URL missing");
+        setLaunchStatus(uiText("Payment is required. Complete checkout and return to continue launch.", "需要先完成支付，支付后返回即可继续启动。"));
+        setLaunchError(url ? null : uiText("Checkout URL missing from paywall response.", "支付响应中缺少结账 URL。"));
+        appendEvent("warning", uiText("Paywall required", "需要支付"), url ? uiText("Checkout URL generated", "已生成结账 URL") : uiText("Checkout URL missing", "缺少结账 URL"));
         return;
       }
 
       if (!response.ok) {
-        const message = getErrorMessage(payload, `Launch failed with ${response.status}.`);
+        const message = getErrorMessage(payload, `${uiText("Launch failed", "启动失败")} ${response.status}.`);
         setLaunchError(message);
-        setLaunchStatus("Launch failed. Fix the error and retry.");
-        appendEvent("error", "Launch failed", message);
+        setLaunchStatus(uiText("Launch failed. Fix the error and retry.", "启动失败，请修复问题后重试。"));
+        appendEvent("error", uiText("Launch failed", "启动失败"), message);
         return;
       }
 
       const parsedWorker = getWorker(payload);
       if (!parsedWorker) {
-        setLaunchError("Launch response was missing worker details.");
-        setLaunchStatus("Launch response format was unexpected.");
-        appendEvent("error", "Launch failed", "Worker payload missing");
+        setLaunchError(cloudText("launch_missing_worker_details"));
+        setLaunchStatus(uiText("Launch response format was unexpected.", "启动响应格式异常。"));
+        appendEvent("error", uiText("Launch failed", "启动失败"), uiText("Worker payload missing", "缺少 Worker 数据"));
         return;
       }
 
@@ -1228,23 +1292,23 @@ export function CloudControlPanel() {
       setShowLaunchForm(false);
 
       if (resolvedWorker.status === "provisioning") {
-        setLaunchStatus("Provisioning started. This can take a few minutes, and we will keep checking automatically.");
-        appendEvent("info", "Provisioning started", `Worker ID ${parsedWorker.workerId}`);
+        setLaunchStatus(uiText("Provisioning started. This can take a few minutes, and we will keep checking automatically.", "已开始创建资源，可能需要几分钟，系统会自动持续检查。"));
+        appendEvent("info", uiText("Provisioning started", "创建已开始"), `Worker ID ${parsedWorker.workerId}`);
       } else {
         setLaunchStatus(getWorkerStatusCopy(resolvedWorker.status));
-        appendEvent("success", "Worker launched", `Worker ID ${parsedWorker.workerId}`);
+        appendEvent("success", uiText("Worker launched", "Worker 已启动"), `Worker ID ${parsedWorker.workerId}`);
       }
     } catch (error) {
       const message =
         error instanceof DOMException && error.name === "AbortError"
-          ? "Launch request took longer than expected. Provisioning can continue in the background. Refresh worker status below."
+          ? uiText("Launch request took longer than expected. Provisioning can continue in the background. Refresh worker status below.", "启动请求超时，资源创建可能仍在后台继续。请在下方刷新状态。")
           : error instanceof Error
             ? error.message
-            : "Unknown network error";
+            : uiText("Unknown network error", "未知网络错误");
 
       setLaunchError(message);
-      setLaunchStatus("Launch request failed.");
-      appendEvent("error", "Launch failed", message);
+      setLaunchStatus(uiText("Launch request failed.", "启动请求失败。"));
+      appendEvent("error", uiText("Launch failed", "启动失败"), message);
     } finally {
       setLaunchBusy(false);
       void refreshWorkers({ keepSelection: true });
@@ -1257,7 +1321,7 @@ export function CloudControlPanel() {
 
     if (!user) {
       if (!quiet) {
-        setLaunchError("Sign in before checking worker status.");
+        setLaunchError(cloudText("sign_in_before_status"));
       }
       return;
     }
@@ -1266,7 +1330,7 @@ export function CloudControlPanel() {
     const id = options.workerId ?? fallbackId;
     if (!id) {
       if (!quiet) {
-        setLaunchError("No worker selected yet. Launch one first, then use this panel.");
+        setLaunchError(cloudText("launch_worker_first_status_panel"));
       }
       return;
     }
@@ -1287,10 +1351,10 @@ export function CloudControlPanel() {
       });
 
       if (!response.ok) {
-        const message = getErrorMessage(payload, `Status check failed with ${response.status}.`);
+        const message = getErrorMessage(payload, `${uiText("Status check failed", "状态检查失败")} ${response.status}.`);
         if (!quiet) {
           setLaunchError(message);
-          appendEvent("error", "Status check failed", message);
+          appendEvent("error", uiText("Status check failed", "状态检查失败"), message);
         }
         return;
       }
@@ -1298,8 +1362,8 @@ export function CloudControlPanel() {
       const summary = getWorkerSummary(payload);
       if (!summary) {
         if (!quiet) {
-          setLaunchError("Status response was missing worker details.");
-          appendEvent("error", "Status check failed", "Worker summary missing");
+          setLaunchError(cloudText("status_missing_worker_details"));
+          appendEvent("error", uiText("Status check failed", "状态检查失败"), uiText("Worker summary missing", "缺少 Worker 摘要"));
         }
         return;
       }
@@ -1333,17 +1397,17 @@ export function CloudControlPanel() {
       setWorkerLookupId(summary.workerId);
 
       if (!quiet) {
-        setLaunchStatus(`Worker ${summary.workerName} is currently ${summary.status}.`);
-        appendEvent("info", "Status refreshed", `${summary.workerName}: ${summary.status}`);
+        setLaunchStatus(`${uiText("Worker", "Worker")} ${summary.workerName} ${uiText("is currently", "当前状态为")} ${summary.status}.`);
+        appendEvent("info", uiText("Status refreshed", "状态已刷新"), `${summary.workerName}: ${summary.status}`);
       } else if (previousStatus && previousStatus !== summary.status) {
         setLaunchStatus(getWorkerStatusCopy(summary.status));
 
         if (summary.status === "healthy") {
-          appendEvent("success", "Provisioning complete", `${summary.workerName} is ready`);
+          appendEvent("success", uiText("Provisioning complete", "创建完成"), `${summary.workerName} ${uiText("is ready", "已就绪")}`);
         } else if (summary.status === "failed") {
-          appendEvent("error", "Provisioning failed", `${summary.workerName} failed to provision`);
+          appendEvent("error", uiText("Provisioning failed", "创建失败"), `${summary.workerName} ${uiText("failed to provision", "创建失败")}`);
         } else {
-          appendEvent("info", "Provisioning update", `${summary.workerName}: ${summary.status}`);
+          appendEvent("info", uiText("Provisioning update", "创建状态更新"), `${summary.workerName}: ${summary.status}`);
         }
       }
 
@@ -1351,10 +1415,10 @@ export function CloudControlPanel() {
         void refreshWorkers({ keepSelection: true });
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown network error";
+      const message = error instanceof Error ? error.message : uiText("Unknown network error", "未知网络错误");
       if (!quiet) {
         setLaunchError(message);
-        appendEvent("error", "Status check failed", message);
+        appendEvent("error", uiText("Status check failed", "状态检查失败"), message);
       }
     } finally {
       if (!background) {
@@ -1365,13 +1429,13 @@ export function CloudControlPanel() {
 
   async function handleGenerateKey() {
     if (!user) {
-      setLaunchError("Sign in before fetching a worker access token.");
+      setLaunchError(cloudText("sign_in_before_fetch_token"));
       return;
     }
 
     const id = workerLookupId.trim() || worker?.workerId || workers[0]?.workerId || "";
     if (!id) {
-      setLaunchError("No worker selected yet. Launch one first, then fetch a token.");
+      setLaunchError(cloudText("launch_worker_first_fetch_token"));
       return;
     }
 
@@ -1388,16 +1452,16 @@ export function CloudControlPanel() {
       });
 
       if (!response.ok) {
-        const message = getErrorMessage(payload, `Token fetch failed with ${response.status}.`);
+        const message = getErrorMessage(payload, `${uiText("Token fetch failed", "令牌获取失败")} ${response.status}.`);
         setLaunchError(message);
-        appendEvent("error", "Token fetch failed", message);
+        appendEvent("error", uiText("Token fetch failed", "令牌获取失败"), message);
         return;
       }
 
       const tokens = getWorkerTokens(payload);
       if (!tokens) {
-        setLaunchError("Token response returned no token values.");
-        appendEvent("error", "Token fetch failed", "Missing token payload");
+        setLaunchError(cloudText("token_response_missing_values"));
+        appendEvent("error", uiText("Token fetch failed", "令牌获取失败"), uiText("Missing token payload", "缺少令牌数据"));
         return;
       }
 
@@ -1412,7 +1476,7 @@ export function CloudControlPanel() {
             }
           : {
               workerId: id,
-              workerName: "Existing worker",
+              workerName: uiText("Existing worker", "已有 Worker"),
               status: "unknown",
               provider: null,
               instanceUrl: null,
@@ -1425,13 +1489,13 @@ export function CloudControlPanel() {
       const resolvedWorker = await withResolvedOpenworkCredentials(nextWorker, { quiet: true });
       setWorker(resolvedWorker);
 
-      setLaunchStatus("Worker is ready to connect.");
-      appendEvent("success", "Access token ready", `Worker ID ${id}`);
+      setLaunchStatus(uiText("Worker is ready to connect.", "Worker 已可连接。"));
+      appendEvent("success", uiText("Access token ready", "访问令牌已就绪"), `Worker ID ${id}`);
       void refreshWorkers({ keepSelection: true });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown network error";
+      const message = error instanceof Error ? error.message : uiText("Unknown network error", "未知网络错误");
       setLaunchError(message);
-      appendEvent("error", "Token fetch failed", message);
+      appendEvent("error", uiText("Token fetch failed", "令牌获取失败"), message);
     } finally {
       setActionBusy(null);
     }
@@ -1439,7 +1503,7 @@ export function CloudControlPanel() {
 
   async function handleDeleteWorker(workerId: string) {
     if (!user) {
-      setLaunchError("Sign in before deleting a worker.");
+      setLaunchError(cloudText("sign_in_before_delete"));
       return;
     }
 
@@ -1448,10 +1512,10 @@ export function CloudControlPanel() {
     }
 
     const target = workers.find((entry) => entry.workerId === workerId) ?? null;
-    const workerLabel = target?.workerName ?? "this worker";
+    const workerLabel = target?.workerName ?? uiText("this worker", "该 Worker");
 
     if (typeof window !== "undefined") {
-      const confirmed = window.confirm(`Delete "${workerLabel}"? This removes it from your worker list.`);
+      const confirmed = window.confirm(uiText(`Delete "${workerLabel}"? This removes it from your worker list.`, `确认删除 "${workerLabel}"？删除后将从 Worker 列表移除。`));
       if (!confirmed) {
         return;
       }
@@ -1467,9 +1531,9 @@ export function CloudControlPanel() {
       });
 
       if (response.status !== 204 && !response.ok) {
-        const message = getErrorMessage(payload, `Delete failed with ${response.status}.`);
+        const message = getErrorMessage(payload, `${uiText("Delete failed", "删除失败")} ${response.status}.`);
         setLaunchError(message);
-        appendEvent("error", "Delete failed", message);
+        appendEvent("error", uiText("Delete failed", "删除失败"), message);
         return;
       }
 
@@ -1488,13 +1552,13 @@ export function CloudControlPanel() {
         window.localStorage.removeItem(LAST_WORKER_STORAGE_KEY);
       }
 
-      setLaunchStatus(`Deleted ${workerLabel}.`);
-      appendEvent("success", "Worker deleted", workerLabel);
+      setLaunchStatus(`${uiText("Deleted", "已删除")} ${workerLabel}.`);
+      appendEvent("success", uiText("Worker deleted", "Worker 已删除"), workerLabel);
       await refreshWorkers({ keepSelection: false });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown network error";
+      const message = error instanceof Error ? error.message : uiText("Unknown network error", "未知网络错误");
       setLaunchError(message);
-      appendEvent("error", "Delete failed", message);
+      appendEvent("error", uiText("Delete failed", "删除失败"), message);
     } finally {
       setDeleteBusyWorkerId(null);
     }
@@ -1514,7 +1578,7 @@ export function CloudControlPanel() {
           <div className="ow-stack">
             <div className="ow-heading-block">
               <span className="ow-icon-chip">01</span>
-              <h1 className="ow-title">{authMode === "sign-up" ? "Get started" : "Welcome back"}</h1>
+              <h1 className="ow-title">{authMode === "sign-up" ? uiText("Get started", "开始使用") : uiText("Welcome back", "欢迎回来")}</h1>
               <p className="ow-subtitle">
                 {authMode === "sign-up"
                   ? getAuthInfoForMode("sign-up")
@@ -1524,7 +1588,7 @@ export function CloudControlPanel() {
 
             <form className="ow-stack" onSubmit={handleAuthSubmit}>
               <label className="ow-field-block">
-                <span className="ow-field-label">Email</span>
+                <span className="ow-field-label">{uiText("Email", "邮箱")}</span>
                 <input
                   className="ow-input"
                   type="email"
@@ -1536,7 +1600,7 @@ export function CloudControlPanel() {
               </label>
 
               <label className="ow-field-block">
-                <span className="ow-field-label">Password</span>
+                <span className="ow-field-label">{uiText("Password", "密码")}</span>
                 <input
                   className="ow-input"
                   type="password"
@@ -1548,16 +1612,16 @@ export function CloudControlPanel() {
               </label>
 
               <button type="submit" className="ow-btn-primary" disabled={authBusy}>
-                {authBusy ? "Working..." : authMode === "sign-in" ? "Sign in" : "Create account"}
+                {authBusy ? uiText("Working...", "处理中...") : authMode === "sign-in" ? uiText("Sign in", "登录") : uiText("Create account", "创建账号")}
               </button>
 
               <button type="button" className="ow-btn-secondary w-full" onClick={() => void handleGitHubSignIn()} disabled={authBusy}>
-                Continue with GitHub
+                {uiText("Continue with GitHub", "使用 GitHub 继续")}
               </button>
             </form>
 
             <div className="ow-inline-row">
-              <p className="ow-caption">{authMode === "sign-in" ? "Need an account?" : "Already have an account?"}</p>
+              <p className="ow-caption">{authMode === "sign-in" ? uiText("Need an account?", "还没有账号？") : uiText("Already have an account?", "已经有账号了？")}</p>
               <button
                 type="button"
                 className="ow-link"
@@ -1568,7 +1632,7 @@ export function CloudControlPanel() {
                   setAuthError(null);
                 }}
               >
-                {authMode === "sign-in" ? "Create account" : "Switch to sign in"}
+                {authMode === "sign-in" ? uiText("Create account", "创建账号") : uiText("Switch to sign in", "切换到登录")}
               </button>
             </div>
 
@@ -1590,7 +1654,7 @@ export function CloudControlPanel() {
                     shellView === "workers" ? "bg-[#1B29FF]/10 text-[#1B29FF]" : "text-slate-600 hover:bg-slate-100"
                   }`}
                 >
-                  Workers
+                  {uiText("Workers", "Workers")}
                 </button>
                 <button
                   type="button"
@@ -1599,7 +1663,7 @@ export function CloudControlPanel() {
                     shellView === "billing" ? "bg-[#1B29FF]/10 text-[#1B29FF]" : "text-slate-600 hover:bg-slate-100"
                   }`}
                 >
-                  Billing
+                  {uiText("Billing", "账单")}
                 </button>
               </div>
               <button
@@ -1608,7 +1672,7 @@ export function CloudControlPanel() {
                 onClick={() => void handleSignOut()}
                 disabled={authBusy}
               >
-                {authBusy ? "Signing out..." : "Log out"}
+                {authBusy ? uiText("Signing out...", "正在退出...") : uiText("Log out", "退出登录")}
               </button>
             </div>
 
@@ -1618,7 +1682,7 @@ export function CloudControlPanel() {
                   <div>
                     <div className="mb-6">
                       <div className="mb-3 flex items-center gap-2 px-2 text-xs font-medium uppercase tracking-[0.08em] text-slate-400">
-                        <span>Menu</span>
+                        <span>{uiText("Menu", "菜单")}</span>
                       </div>
                       <nav className="space-y-1">
                         <button
@@ -1626,38 +1690,38 @@ export function CloudControlPanel() {
                           className="w-full rounded-[14px] bg-[#1B29FF]/10 px-3 py-2.5 text-left text-sm font-medium text-[#1B29FF] transition"
                           onClick={() => setShellView("workers")}
                         >
-                          Workers
+                          {uiText("Workers", "Workers")}
                         </button>
                         <button
                           type="button"
                           className="w-full rounded-[14px] px-3 py-2.5 text-left text-sm font-medium text-slate-500 transition hover:bg-slate-50"
                           onClick={() => setShellView("billing")}
                         >
-                          Billing
+                          {uiText("Billing", "账单")}
                         </button>
-                        <span className="block rounded-[14px] px-3 py-2.5 text-sm font-medium text-slate-400">Settings</span>
-                        <span className="block rounded-[14px] px-3 py-2.5 text-sm font-medium text-slate-400">Help Center</span>
+                        <span className="block rounded-[14px] px-3 py-2.5 text-sm font-medium text-slate-400">{uiText("Settings", "设置")}</span>
+                        <span className="block rounded-[14px] px-3 py-2.5 text-sm font-medium text-slate-400">{uiText("Help Center", "帮助中心")}</span>
                       </nav>
                     </div>
                   </div>
 
                   <div className="rounded-[22px] border border-slate-200 bg-[#F8F9FA] p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-400">Signed in</p>
-                    <p className="mt-1 break-all text-sm font-medium text-slate-700">{(user?.email ?? email) || "account"}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-400">{uiText("Signed in", "已登录")}</p>
+                      <p className="mt-1 break-all text-sm font-medium text-slate-700">{(user?.email ?? email) || uiText("account", "账号")}</p>
                     <button
                       type="button"
                       className="mt-4 w-full rounded-[12px] bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                       onClick={() => void handleSignOut()}
                       disabled={authBusy}
                     >
-                      {authBusy ? "Signing out..." : "Log out"}
+                      {authBusy ? uiText("Signing out...", "正在退出...") : uiText("Log out", "退出登录")}
                     </button>
                   </div>
                 </aside>
 
                 <section className="flex h-full w-full shrink-0 flex-col rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm md:w-[340px]">
                   <div className="mb-6 flex items-center justify-between">
-                    <h2 className="text-xl font-semibold tracking-tight text-slate-900">Workers</h2>
+                    <h2 className="text-xl font-semibold tracking-tight text-slate-900">{uiText("Workers", "Workers")}</h2>
                     <button
                       type="button"
                       className="rounded-full bg-[#1B29FF] p-2.5 text-white transition hover:bg-[#151FDA]"
@@ -1670,7 +1734,7 @@ export function CloudControlPanel() {
                   {showLaunchForm ? (
                     <div className="mb-5 rounded-[20px] border border-slate-200 bg-slate-50 p-4">
                       <label className="mb-3 block">
-                        <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Worker Name</span>
+                        <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">{uiText("Worker Name", "Worker 名称")}</span>
                         <input
                           className="w-full rounded-[12px] border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-[#1B29FF] focus:ring-2 focus:ring-[#1B29FF]/15"
                           value={workerName}
@@ -1686,10 +1750,10 @@ export function CloudControlPanel() {
                         disabled={!user || launchBusy || worker?.status === "provisioning"}
                       >
                         {launchBusy
-                          ? "Starting worker..."
+                          ? uiText("Starting worker...", "正在启动 Worker...")
                           : worker?.status === "provisioning"
-                            ? "Worker is starting..."
-                            : `Launch "${workerName || "Cloud Worker"}"`}
+                            ? uiText("Worker is starting...", "Worker 启动中...")
+                            : uiText(`Launch "${workerName || "Cloud Worker"}"`, `启动 "${workerName || "Cloud Worker"}"`)}
                       </button>
 
                       {(launchStatus || launchError) && showLaunchForm ? (
@@ -1701,13 +1765,13 @@ export function CloudControlPanel() {
 
                       {checkoutUrl ? (
                         <div className="mt-3 rounded-[12px] border border-amber-200 bg-amber-50 px-3 py-2.5">
-                          <p className="text-sm font-semibold text-amber-800">Payment needed before launch</p>
+                          <p className="text-sm font-semibold text-amber-800">{uiText("Payment needed before launch", "启动前需要完成支付")}</p>
                           <a
                             href={checkoutUrl}
                             rel="noreferrer"
                             className="mt-2 inline-flex rounded-[10px] border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 transition hover:bg-amber-100"
                           >
-                            Continue to checkout
+                            {uiText("Continue to checkout", "继续支付")}
                           </a>
                         </div>
                       ) : null}
@@ -1719,22 +1783,22 @@ export function CloudControlPanel() {
                       className="min-w-[170px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700 outline-none focus:border-[#1B29FF]"
                       value={workerQuery}
                       onChange={(event) => setWorkerQuery(event.target.value)}
-                      placeholder="Search..."
-                      aria-label="Search workers"
+                      placeholder={cloudText("search_placeholder")}
+                      aria-label={uiText("Search workers", "搜索 Worker")}
                     />
                     <select
                       className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 outline-none"
                       value={workerStatusFilter}
                       onChange={(event) => setWorkerStatusFilter(event.target.value as WorkerStatusBucket | "all")}
                     >
-                      <option value="all">All</option>
-                      <option value="ready">Ready</option>
-                      <option value="starting">Starting</option>
-                      <option value="attention">Attention</option>
+                      <option value="all">{uiText("All", "全部")}</option>
+                      <option value="ready">{uiText("Ready", "就绪")}</option>
+                      <option value="starting">{uiText("Starting", "启动中")}</option>
+                      <option value="attention">{uiText("Attention", "需关注")}</option>
                     </select>
                   </div>
 
-                  {workersBusy ? <p className="mb-2 text-xs text-slate-500">Loading workers...</p> : null}
+                  {workersBusy ? <p className="mb-2 text-xs text-slate-500">{uiText("Loading workers...", "正在加载 Worker...")}</p> : null}
                   {workersError ? <p className="mb-2 text-xs font-medium text-rose-600">{workersError}</p> : null}
 
                   <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
@@ -1779,7 +1843,7 @@ export function CloudControlPanel() {
                             </span>
                             {item.isMine ? (
                               <span className="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                                Yours
+                                {uiText("Yours", "我的")}
                               </span>
                             ) : null}
                           </div>
@@ -1796,11 +1860,11 @@ export function CloudControlPanel() {
                   </div>
 
                   {workers.length > 0 && filteredWorkers.length === 0 ? (
-                    <p className="mt-3 text-xs text-slate-500">No workers match this filter.</p>
+                    <p className="mt-3 text-xs text-slate-500">{uiText("No workers match this filter.", "没有匹配当前筛选条件的 Worker。")}</p>
                   ) : null}
 
                   {workers.length === 0 && !workersBusy ? (
-                    <p className="mt-3 text-xs text-slate-500">No workers yet. Create one to get started.</p>
+                    <p className="mt-3 text-xs text-slate-500">{uiText("No workers yet. Create one to get started.", "还没有 Worker，先创建一个开始使用。")}</p>
                   ) : null}
                 </section>
 
@@ -1808,7 +1872,7 @@ export function CloudControlPanel() {
                   {selectedWorker ? (
                     <>
                       <div className="mb-2 px-1">
-                        <h1 className="mb-1 text-2xl font-bold tracking-tight text-slate-900">Overview</h1>
+                        <h1 className="mb-1 text-2xl font-bold tracking-tight text-slate-900">{uiText("Overview", "概览")}</h1>
                       </div>
 
                       <div className="min-h-0 flex-1 space-y-6 overflow-y-auto pb-2">
@@ -1820,12 +1884,12 @@ export function CloudControlPanel() {
 
                           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                             <div className="rounded-[20px] border border-slate-100 bg-white p-4">
-                              <p className="text-sm font-medium text-slate-500">Status</p>
+                              <p className="text-sm font-medium text-slate-500">{uiText("Status", "状态")}</p>
                               <p className="mt-2 text-2xl font-bold text-slate-900">{selectedStatusMeta.label}</p>
                             </div>
                             <div className="rounded-[20px] border border-slate-100 bg-white p-4">
-                              <p className="text-sm font-medium text-slate-500">Connection</p>
-                              <p className="mt-2 text-2xl font-bold text-slate-900">{openworkDeepLink ? "Ready" : "Preparing"}</p>
+                              <p className="text-sm font-medium text-slate-500">{uiText("Connection", "连接")}</p>
+                              <p className="mt-2 text-2xl font-bold text-slate-900">{openworkDeepLink ? uiText("Ready", "就绪") : uiText("Preparing", "准备中")}</p>
                             </div>
                           </div>
                         </div>
@@ -1833,8 +1897,8 @@ export function CloudControlPanel() {
                         <div className="rounded-[28px] border border-slate-100 bg-white p-6">
                           <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                             <div>
-                              <h3 className="text-lg font-bold tracking-tight text-slate-900">Connection Details</h3>
-                              <p className="text-sm text-slate-500">Access and manage your worker instance.</p>
+                              <h3 className="text-lg font-bold tracking-tight text-slate-900">{uiText("Connection Details", "连接详情")}</h3>
+                              <p className="text-sm text-slate-500">{uiText("Access and manage your worker instance.", "访问并管理你的 Worker 实例。")}</p>
                             </div>
 
                             <div className="flex flex-wrap items-center gap-2">
@@ -1849,7 +1913,7 @@ export function CloudControlPanel() {
                                 }}
                                 disabled={!openworkDeepLink || selectedStatusMeta.bucket !== "ready"}
                               >
-                                {openworkDeepLink ? "Open in OpenWork" : "Preparing connection..."}
+                                {openworkDeepLink ? uiText("Open in OpenWork", "在 OpenWork 中打开") : uiText("Preparing connection...", "连接准备中...")}
                               </button>
 
                               {openworkAppConnectUrl ? (
@@ -1864,7 +1928,7 @@ export function CloudControlPanel() {
                                   }`}
                                   aria-disabled={selectedStatusMeta.bucket !== "ready"}
                                 >
-                                  Open in App
+                                  {uiText("Open in App", "在 App 中打开")}
                                 </a>
                               ) : null}
                             </div>
@@ -1874,9 +1938,9 @@ export function CloudControlPanel() {
                             <p className="text-sm text-slate-600">
                               {openworkDeepLink
                                 ? openworkAppConnectUrl
-                                  ? "You are all set. Open in OpenWork or Open in App to start working."
-                                  : "You are all set. Open in OpenWork to start working."
-                                : "We are still preparing your connection. The button will unlock when ready."}
+                                  ? uiText("You are all set. Open in OpenWork or Open in App to start working.", "已全部就绪。可在 OpenWork 或 App 中打开并开始工作。")
+                                  : uiText("You are all set. Open in OpenWork to start working.", "已全部就绪。可在 OpenWork 中打开并开始工作。")
+                                : uiText("We are still preparing your connection. The button will unlock when ready.", "正在准备连接，完成后按钮会自动可用。")}
                             </p>
                           </div>
 
@@ -1892,18 +1956,18 @@ export function CloudControlPanel() {
                               })
                             }
                           >
-                            {showAdvancedOptions ? "Hide advanced options" : "Need manual setup? Show advanced options"}
+                            {showAdvancedOptions ? uiText("Hide advanced options", "隐藏高级选项") : uiText("Need manual setup? Show advanced options", "需要手动配置？显示高级选项")}
                           </button>
 
                           {showAdvancedOptions ? (
                             <div className="mt-4 space-y-4">
                               <div>
-                                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-400">Connection URL</label>
+                                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-400">{uiText("Connection URL", "连接 URL")}</label>
                                 <div className="flex items-center gap-2 rounded-[14px] border border-slate-200 bg-[#F8F9FA] p-1.5">
                                   <input
                                     type="text"
                                     readOnly
-                                    value={openworkConnectUrl ?? "Connection URL is still preparing..."}
+                                    value={openworkConnectUrl ?? uiText("Connection URL is still preparing...", "连接 URL 仍在准备中...")}
                                     className="w-full flex-1 bg-transparent px-3 py-2 font-mono text-xs text-slate-600 outline-none"
                                     onClick={(event) => event.currentTarget.select()}
                                   />
@@ -1913,16 +1977,16 @@ export function CloudControlPanel() {
                                     disabled={!openworkConnectUrl}
                                     onClick={() => void copyToClipboard("openwork-url", openworkConnectUrl)}
                                   >
-                                    {copiedField === "openwork-url" ? "Copied" : "Copy"}
+                                    {copiedField === "openwork-url" ? uiText("Copied", "已复制") : uiText("Copy", "复制")}
                                   </button>
                                 </div>
                                 {!openworkDeepLink || !openworkConnectUrl || (!hasWorkspaceScopedUrl && openworkConnectUrl) ? (
                                   <p className="mt-2 text-xs text-slate-500">
                                     {!openworkDeepLink
-                                      ? "Getting connection details ready..."
+                                      ? uiText("Getting connection details ready...", "正在准备连接详情...")
                                       : !openworkConnectUrl
-                                        ? "Keep this page open for a moment."
-                                        : "Finishing your workspace URL..."}
+                                        ? uiText("Keep this page open for a moment.", "请保持当前页面打开片刻。")
+                                        : uiText("Finishing your workspace URL...", "正在完成工作区 URL...")}
                                   </p>
                                 ) : null}
                               </div>
@@ -1934,24 +1998,24 @@ export function CloudControlPanel() {
                                     onClick={() => setOpenAccordion((current) => (current === "connect" ? null : "connect"))}
                                     className="flex w-full items-center justify-between p-4 text-left transition hover:bg-slate-50"
                                   >
-                                    <span className="text-sm font-semibold text-slate-800">Manual connect details</span>
+                                    <span className="text-sm font-semibold text-slate-800">{uiText("Manual connect details", "手动连接信息")}</span>
                                     <span className="text-sm text-slate-400">{openAccordion === "connect" ? "v" : ">"}</span>
                                   </button>
                                   {openAccordion === "connect" ? (
                                     <div className="space-y-3 px-4 pb-4">
                                       <CredentialRow
-                                        label="OpenWork worker URL"
+                                        label={uiText("OpenWork worker URL", "OpenWork Worker URL")}
                                         value={openworkConnectUrl}
-                                        placeholder="URL appears once ready"
+                                        placeholder={cloudText("url_appears_ready")}
                                         canCopy={Boolean(openworkConnectUrl)}
                                         copied={copiedField === "manual-openwork-url"}
                                         onCopy={() => void copyToClipboard("manual-openwork-url", openworkConnectUrl)}
                                       />
 
                                       <CredentialRow
-                                        label="Access token"
+                                        label={uiText("Access token", "访问令牌")}
                                         value={activeWorker?.clientToken ?? null}
-                                        placeholder="Use Worker actions to refresh"
+                                        placeholder={cloudText("use_worker_actions_refresh")}
                                         canCopy={Boolean(activeWorker?.clientToken)}
                                         copied={copiedField === "access-token"}
                                         onCopy={() => void copyToClipboard("access-token", activeWorker?.clientToken ?? null)}
@@ -1966,7 +2030,7 @@ export function CloudControlPanel() {
                                     onClick={() => setOpenAccordion((current) => (current === "actions" ? null : "actions"))}
                                     className="flex w-full items-center justify-between p-4 text-left transition hover:bg-slate-50"
                                   >
-                                    <span className="text-sm font-semibold text-slate-800">Worker actions</span>
+                                    <span className="text-sm font-semibold text-slate-800">{uiText("Worker actions", "Worker 操作")}</span>
                                     <span className="text-sm text-slate-400">{openAccordion === "actions" ? "v" : ">"}</span>
                                   </button>
                                   {openAccordion === "actions" ? (
@@ -1977,7 +2041,7 @@ export function CloudControlPanel() {
                                         onClick={() => void refreshWorkers({ keepSelection: true })}
                                         disabled={workersBusy || actionBusy !== null}
                                       >
-                                        {workersBusy ? "Refreshing..." : "Refresh list"}
+                                        {workersBusy ? uiText("Refreshing...", "刷新中...") : uiText("Refresh list", "刷新列表")}
                                       </button>
                                       <button
                                         type="button"
@@ -1985,7 +2049,7 @@ export function CloudControlPanel() {
                                         onClick={() => void handleCheckStatus({ workerId: selectedWorker.workerId })}
                                         disabled={actionBusy !== null}
                                       >
-                                        {actionBusy === "status" ? "Checking..." : "Check status"}
+                                        {actionBusy === "status" ? uiText("Checking...", "检查中...") : uiText("Check status", "检查状态")}
                                       </button>
                                       <button
                                         type="button"
@@ -1993,7 +2057,7 @@ export function CloudControlPanel() {
                                         onClick={handleGenerateKey}
                                         disabled={actionBusy !== null}
                                       >
-                                        {actionBusy === "token" ? "Fetching..." : "Refresh token"}
+                                        {actionBusy === "token" ? uiText("Fetching...", "获取中...") : uiText("Refresh token", "刷新令牌")}
                                       </button>
                                       <button
                                         type="button"
@@ -2001,7 +2065,7 @@ export function CloudControlPanel() {
                                         onClick={() => void handleDeleteWorker(selectedWorker.workerId)}
                                         disabled={deleteBusyWorkerId !== null || actionBusy !== null || launchBusy}
                                       >
-                                        {deleteBusyWorkerId === selectedWorker.workerId ? "Deleting..." : "Delete worker"}
+                                        {deleteBusyWorkerId === selectedWorker.workerId ? uiText("Deleting...", "删除中...") : uiText("Delete worker", "删除 Worker")}
                                       </button>
                                     </div>
                                   ) : null}
@@ -2013,24 +2077,24 @@ export function CloudControlPanel() {
                                     onClick={() => setOpenAccordion((current) => (current === "advanced" ? null : "advanced"))}
                                     className="flex w-full items-center justify-between p-4 text-left transition hover:bg-slate-50"
                                   >
-                                    <span className="text-sm font-semibold text-slate-800">Advanced details</span>
+                                    <span className="text-sm font-semibold text-slate-800">{uiText("Advanced details", "高级详情")}</span>
                                     <span className="text-sm text-slate-400">{openAccordion === "advanced" ? "v" : ">"}</span>
                                   </button>
                                   {openAccordion === "advanced" ? (
                                     <div className="space-y-3 px-4 pb-4">
                                       <CredentialRow
-                                        label="Worker host URL"
+                                        label={uiText("Worker host URL", "Worker 主机 URL")}
                                         value={activeWorker?.instanceUrl ?? null}
-                                        placeholder="Host URL"
+                                        placeholder={cloudText("host_url")}
                                         canCopy={Boolean(activeWorker?.instanceUrl)}
                                         copied={copiedField === "worker-host-url"}
                                         onCopy={() => void copyToClipboard("worker-host-url", activeWorker?.instanceUrl ?? null)}
                                       />
 
                                       <CredentialRow
-                                        label="Worker ID"
+                                        label={uiText("Worker ID", "Worker ID")}
                                         value={(activeWorker?.workerId ?? workerLookupId) || null}
-                                        placeholder="Worker ID"
+                                        placeholder={cloudText("worker_id")}
                                         canCopy={Boolean(activeWorker?.workerId || workerLookupId)}
                                         copied={copiedField === "worker-id"}
                                         onCopy={() => void copyToClipboard("worker-id", (activeWorker?.workerId ?? workerLookupId) || null)}
@@ -2038,7 +2102,7 @@ export function CloudControlPanel() {
 
                                       {events.length > 0 ? (
                                         <div className="rounded-[12px] border border-slate-200 bg-slate-50 p-3">
-                                          <p className="mb-2 text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Recent activity</p>
+                                          <p className="mb-2 text-xs font-bold uppercase tracking-[0.08em] text-slate-500">{uiText("Recent activity", "最近活动")}</p>
                                           <ul className="space-y-2">
                                             {events.map((entry) => (
                                               <li key={entry.id} className="rounded-[10px] border border-slate-100 bg-white px-3 py-2">
@@ -2064,8 +2128,8 @@ export function CloudControlPanel() {
                   ) : (
                     <div className="flex min-h-[360px] items-center justify-center rounded-[24px] border border-dashed border-slate-300 bg-slate-50">
                       <div className="px-6 text-center">
-                        <p className="text-lg font-semibold text-slate-900">Select a worker</p>
-                        <p className="mt-1 text-sm text-slate-500">Pick a worker from the list to see details and connect.</p>
+                        <p className="text-lg font-semibold text-slate-900">{uiText("Select a worker", "选择一个 Worker")}</p>
+                        <p className="mt-1 text-sm text-slate-500">{uiText("Pick a worker from the list to see details and connect.", "从列表中选择 Worker 以查看详情并完成连接。")}</p>
                       </div>
                     </div>
                   )}
@@ -2073,21 +2137,21 @@ export function CloudControlPanel() {
               </div>
             ) : (
               <section className="flex h-full flex-1 flex-col rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm md:p-8">
-                <h2 className="text-2xl font-bold tracking-tight text-slate-900">Billing</h2>
-                <p className="mt-1 text-sm text-slate-500">Handle checkout when launching a new worker.</p>
+                <h2 className="text-2xl font-bold tracking-tight text-slate-900">{uiText("Billing", "账单")}</h2>
+                <p className="mt-1 text-sm text-slate-500">{uiText("Handle checkout when launching a new worker.", "在启动新 Worker 时处理结账流程。")}</p>
                 {checkoutUrl ? (
                   <div className="mt-5 rounded-[16px] border border-amber-200 bg-amber-50 p-4">
-                    <p className="text-sm font-semibold text-amber-800">Checkout in progress</p>
+                    <p className="text-sm font-semibold text-amber-800">{uiText("Checkout in progress", "支付进行中")}</p>
                     <a
                       href={checkoutUrl}
                       rel="noreferrer"
                       className="mt-2 inline-flex rounded-[10px] border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 transition hover:bg-amber-100"
                     >
-                      Continue to checkout
+                      {uiText("Continue to checkout", "继续支付")}
                     </a>
                   </div>
                 ) : (
-                  <p className="mt-4 text-sm text-slate-600">No payment action right now.</p>
+                  <p className="mt-4 text-sm text-slate-600">{uiText("No payment action right now.", "当前暂无支付操作。")}</p>
                 )}
               </section>
             )}
