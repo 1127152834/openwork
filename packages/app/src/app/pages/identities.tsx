@@ -760,8 +760,9 @@ export default function IdentitiesView(props: IdentitiesViewProps) {
         <p class="text-sm text-gray-9 leading-relaxed">
           {translate("identities.header_description")}
         </p>
-        <div class="mt-1.5 text-[11px] text-gray-8 font-mono truncate">
-          {translate("identities.workspace_scope")}: {scopedOpenworkBaseUrl().trim() || props.openworkServerUrl.trim() || translate("identities.not_set")}
+        <div class="mt-1.5 text-[11px] text-gray-8 font-mono break-all">
+          {translate("identities.workspace_scope")}:{" "}
+          {scopedOpenworkBaseUrl().trim() || props.openworkServerUrl.trim() || translate("identities.not_set")}
         </div>
         <Show when={reconnectStatus()}>
           {(value) => <div class="mt-1 text-[11px] text-gray-9">{value()}</div>}
