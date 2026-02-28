@@ -1,10 +1,8 @@
-import { Match, Show, Switch, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js";
+import { For, Match, Show, Switch, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js";
 import type {
-  ArtifactItem,
   DashboardTab,
   McpServerEntry,
   McpStatusMap,
-  MessageWithParts,
   OpencodeConnectStatus,
   PluginScope,
   ProviderListItem,
@@ -18,7 +16,10 @@ import type {
 } from "../types";
 import type { McpDirectoryInfo } from "../constants";
 import {
+  formatRelativeTime,
+  getWorkspaceTaskLoadErrorDisplay,
   isTauriRuntime,
+  isWindowsPlatform,
   normalizeDirectoryPath,
 } from "../utils";
 import {
@@ -50,31 +51,24 @@ import SettingsView from "./settings";
 import SkillsView from "./skills";
 import IdentitiesView from "./identities";
 import StatusBar from "../components/status-bar";
-import OpenWorkLogo from "../components/openwork-logo";
-import {
-  WORKSPACE_CENTER_SURFACE_CLASS,
-  WORKSPACE_DRAWER_SURFACE_CLASS,
-  WORKSPACE_LEFT_DRAWER_WIDTH_CLASS,
-  WORKSPACE_MAIN_CLASS,
-  WORKSPACE_ROOT_CLASS,
-  WORKSPACE_TOPBAR_CLASS,
-  drawerRailClass,
-} from "../layout/workspace-shell";
 import ProviderAuthModal, { type ProviderOAuthStartResult } from "../components/provider-auth-modal";
 import ShareWorkspaceModal from "../components/share-workspace-modal";
+import WorkspaceSessionList from "../components/session/workspace-session-list";
 import {
-  ArrowLeft,
   Box,
+  ChevronDown,
+  ChevronRight,
   Circle,
   History,
   HeartPulse,
   Loader2,
   MessageCircle,
+  MoreHorizontal,
+  Plus,
+  Settings,
   SlidersHorizontal,
-  X,
   Zap,
 } from "lucide-solid";
-import { currentLocale, t } from "../../i18n";
 
 export type DashboardViewProps = {
   tab: DashboardTab;
@@ -169,9 +163,6 @@ export type DashboardViewProps = {
   refreshSoulData: (options?: { force?: boolean }) => void;
   runSoulPrompt: (prompt: string) => void;
   activeWorkspaceRoot: string;
-  messages: MessageWithParts[];
-  artifacts: ArtifactItem[];
-  workingFiles: string[];
   refreshSkills: (options?: { force?: boolean }) => void;
   refreshHubSkills: (options?: { force?: boolean }) => void;
   refreshPlugins: (scopeOverride?: PluginScope) => void;
@@ -220,6 +211,7 @@ export type DashboardViewProps = {
     }>;
   }>;
   addPlugin: (pluginNameOverride?: string) => void;
+  removePlugin: (pluginName: string) => void;
   mcpServers: McpServerEntry[];
   mcpStatus: string | null;
   mcpLastUpdatedAt: number | null;
@@ -332,55 +324,27 @@ type SkillsSetBundleV1 = {
   };
 };
 
-const SESSION_LEFT_DRAWER_OPEN_KEY = "openwork.session.leftDrawerOpen";
-
-const readStoredBoolean = (key: string, fallback = false) => {
-  if (typeof window === "undefined") return fallback;
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (raw == null) return fallback;
-    return raw === "1" || raw === "true";
-  } catch {
-    return fallback;
-  }
-};
-
-const writeStoredBoolean = (key: string, value: boolean) => {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(key, value ? "1" : "0");
-  } catch {
-    // Ignore storage errors.
-  }
-};
-
 export default function DashboardView(props: DashboardViewProps) {
-  const translate = (key: string) => t(key, currentLocale());
-  const translateWithVars = (key: string, vars: Record<string, string | number>) => {
-    const template = translate(key);
-    return Object.entries(vars).reduce((acc, [name, value]) => acc.replaceAll(`{${name}}`, String(value)), template);
-  };
-
   const title = createMemo(() => {
     switch (props.tab) {
       case "scheduled":
-        return translate("dashboard.title");
+        return "Automations";
       case "soul":
-        return translate("dashboard.soul");
+        return "Soul";
       case "skills":
-        return translate("dashboard.skills");
+        return "Skills";
       case "plugins":
-        return translate("dashboard.extensions");
+        return "Extensions";
       case "mcp":
-        return translate("dashboard.extensions");
+        return "Extensions";
       case "identities":
-        return translate("identities.messaging_channels");
+        return "Messaging";
       case "config":
-        return translate("identities.tab_advanced");
+        return "Advanced";
       case "settings":
-        return translate("dashboard.settings");
+        return "Settings";
       default:
-        return translate("dashboard.title");
+        return "Automations";
     }
   });
 
@@ -389,24 +353,51 @@ export default function DashboardView(props: DashboardViewProps) {
     workspace.openworkWorkspaceName?.trim() ||
     workspace.name?.trim() ||
     workspace.path?.trim() ||
-    translate("skills.worker_fallback");
+    "Worker";
+  const workspaceKindLabel = (workspace: WorkspaceInfo) =>
+    workspace.workspaceType === "remote"
+      ? workspace.sandboxBackend === "docker" ||
+        Boolean(workspace.sandboxRunId?.trim()) ||
+        Boolean(workspace.sandboxContainerName?.trim())
+        ? "Sandbox"
+        : "Remote"
+      : "Local";
+
+  const openSessionFromList = (workspaceId: string, sessionId: string) => {
+    // Route-driven selection: navigate first and let the route effect own selectSession.
+    if (workspaceId === props.activeWorkspaceId) {
+      props.setView("session", sessionId);
+      return;
+    }
+    // For different workspace, activate workspace first
+    void (async () => {
+      await Promise.resolve(props.activateWorkspace(workspaceId));
+      props.setView("session", sessionId);
+    })();
+  };
+
+  const createTaskInWorkspace = (workspaceId: string) => {
+    const id = workspaceId.trim();
+    if (!id) return;
+    if (id === props.activeWorkspaceId) {
+      props.createSessionAndOpen();
+      return;
+    }
+    void (async () => {
+      await Promise.resolve(props.activateWorkspace(id));
+      props.createSessionAndOpen();
+    })();
+  };
 
   // Track last refreshed tab to avoid duplicate calls
   const [lastRefreshedTab, setLastRefreshedTab] = createSignal<string | null>(null);
   const [refreshInProgress, setRefreshInProgress] = createSignal(false);
   const [providerAuthActionBusy, setProviderAuthActionBusy] = createSignal(false);
-  const [leftDrawerOpen, setLeftDrawerOpen] = createSignal(
-    readStoredBoolean(SESSION_LEFT_DRAWER_OPEN_KEY, true),
-  );
   const [shareWorkspaceId, setShareWorkspaceId] = createSignal<string | null>(null);
-
-  createEffect(() => {
-    writeStoredBoolean(SESSION_LEFT_DRAWER_OPEN_KEY, leftDrawerOpen());
-  });
 
   const handleProviderAuthSelect = async (providerId: string): Promise<ProviderOAuthStartResult> => {
     if (providerAuthActionBusy()) {
-      throw new Error(translate("session.provider_auth_in_progress"));
+      throw new Error("Provider auth is already in progress.");
     }
     setProviderAuthActionBusy(true);
     try {
@@ -499,10 +490,11 @@ export default function DashboardView(props: DashboardViewProps) {
 
   const soulNavIconClass = () => (soulModeEnabled() ? "soul-nav-icon-active" : "");
 
-  const navItem = (t: DashboardTab, label: any, icon: any) => {
+  const navItem = (t: DashboardTab, label: string, icon: any) => {
     const active = () => props.tab === t || (t === "mcp" && props.tab === "plugins");
     return (
       <button
+        type="button"
         class={`w-full h-10 flex items-center gap-3 px-3 rounded-lg text-sm font-medium transition-colors ${
           active()
             ? "bg-dls-active text-dls-text"
@@ -520,12 +512,37 @@ export default function DashboardView(props: DashboardViewProps) {
     props.setSettingsTab(tab);
     props.setTab("settings");
   };
-  const backToWorkspace = () => {
-    props.setView("session", props.selectedSessionId ?? undefined);
-  };
 
   const openConfig = () => {
     props.setTab(props.developerMode ? "config" : "identities");
+  };
+
+  const openSoulForWorkspace = (workspaceId?: string) => {
+    const id = (workspaceId ?? props.activeWorkspaceId).trim();
+    if (!id) return;
+    void (async () => {
+      if (id !== props.activeWorkspaceId) {
+        await Promise.resolve(props.activateWorkspace(id));
+      }
+      props.setTab("soul");
+    })();
+  };
+
+  const revealWorkspaceInFinder = async (workspaceId: string) => {
+    const workspace = props.workspaces.find((entry) => entry.id === workspaceId) ?? null;
+    if (!workspace || workspace.workspaceType !== "local") return;
+    const target = workspace.path?.trim() ?? "";
+    if (!target || !isTauriRuntime()) return;
+    try {
+      const { openPath, revealItemInDir } = await import("@tauri-apps/plugin-opener");
+      if (isWindowsPlatform()) {
+        await openPath(target);
+      } else {
+        await revealItemInDir(target);
+      }
+    } catch (error) {
+      console.warn("Failed to reveal workspace", error);
+    }
   };
 
   createEffect(() => {
@@ -641,30 +658,30 @@ export default function DashboardView(props: DashboardViewProps) {
       });
       return [
         {
-          label: translate("session.share_openwork_invite_link"),
+          label: "OpenWork invite link",
           value: inviteUrl,
           secret: true,
-          placeholder: !isTauriRuntime() ? translate("session.desktop_required") : translate("session.starting_server"),
-          hint: translate("session.share_invite_link_hint"),
+          placeholder: !isTauriRuntime() ? "Desktop app required" : "Starting server...",
+          hint: "One link that prefills worker URL and token.",
         },
         {
-          label: translate("session.share_openwork_worker_url"),
+          label: "OpenWork worker URL",
           value: url,
-          placeholder: !isTauriRuntime() ? translate("session.desktop_required") : translate("session.starting_server"),
+          placeholder: !isTauriRuntime() ? "Desktop app required" : "Starting server...",
           hint: mountedUrl
-            ? translate("session.share_worker_url_hint_worker")
+            ? "Use on phones or laptops connecting to this worker."
             : hostUrl
-              ? translate("session.share_worker_url_hint_fallback")
+              ? "Worker URL is resolving; host URL shown as fallback."
               : undefined,
         },
         {
-          label: translate("session.share_access_token"),
+          label: "Access token",
           value: token,
           secret: true,
-          placeholder: isTauriRuntime() ? "-" : translate("session.desktop_required"),
+          placeholder: isTauriRuntime() ? "-" : "Desktop app required",
           hint: mountedUrl
-            ? translate("session.share_access_token_hint_worker")
-            : translate("session.share_access_token_hint_host"),
+            ? "Use on phones or laptops connecting to this worker."
+            : "Use on phones or laptops connecting to this host.",
         },
       ];
     }
@@ -682,21 +699,21 @@ export default function DashboardView(props: DashboardViewProps) {
       });
       return [
         {
-          label: translate("session.share_openwork_invite_link"),
+          label: "OpenWork invite link",
           value: inviteUrl,
           secret: true,
-          hint: translate("session.share_invite_link_hint"),
+          hint: "One link that prefills worker URL and token.",
         },
         {
-          label: translate("session.share_openwork_worker_url"),
+          label: "OpenWork worker URL",
           value: url,
         },
         {
-          label: translate("session.share_access_token"),
+          label: "Access token",
           value: token,
           secret: true,
-          placeholder: token ? undefined : translate("session.share_set_token_in_workspace"),
-          hint: translate("session.share_access_token_hint_remote"),
+          placeholder: token ? undefined : "Set token in Advanced",
+          hint: "This token grants access to the worker on that host.",
         },
       ];
     }
@@ -705,13 +722,13 @@ export default function DashboardView(props: DashboardViewProps) {
     const directory = ws.directory?.trim() || "";
     return [
       {
-        label: translate("session.share_opencode_base_url"),
+        label: "OpenCode base URL",
         value: baseUrl,
       },
       {
-        label: translate("session.share_directory"),
+        label: "Directory",
         value: directory,
-        placeholder: translate("session.share_directory_auto"),
+        placeholder: "(auto)",
       },
     ];
   });
@@ -720,28 +737,28 @@ export default function DashboardView(props: DashboardViewProps) {
     const ws = shareWorkspace();
     if (!ws) return null;
     if (ws.workspaceType === "local" && props.engineInfo?.runtime === "direct") {
-      return translate("session.share_note_direct_runtime");
+      return "Engine runtime is set to Direct. Switching local workers can restart the host and disconnect clients. The token may change after a restart.";
     }
     return null;
   });
 
   const shareServiceDisabledReason = createMemo(() => {
     const ws = shareWorkspace();
-    if (!ws) return translate("session.share_select_worker_first");
+    if (!ws) return "Select a worker first.";
     if (ws.workspaceType === "remote" && ws.remoteType !== "openwork") {
-      return translate("session.share_openwork_only");
+      return "Share service links are available for OpenWork workers.";
     }
     if (ws.workspaceType !== "remote") {
       const baseUrl = props.openworkServerHostInfo?.baseUrl?.trim() ?? "";
       const token = props.openworkServerHostInfo?.clientToken?.trim() ?? "";
       if (!baseUrl || !token) {
-        return translate("session.share_local_host_not_ready");
+        return "Local OpenWork host is not ready yet.";
       }
     } else {
       const hostUrl = ws.openworkHostUrl?.trim() || ws.baseUrl?.trim() || "";
       const token = ws.openworkToken?.trim() || props.openworkServerSettings.token?.trim() || "";
-      if (!hostUrl) return translate("session.share_missing_openwork_host_url");
-      if (!token) return translate("session.share_missing_openwork_token");
+      if (!hostUrl) return "Missing OpenWork host URL.";
+      if (!token) return "Missing OpenWork token.";
     }
     return null;
   });
@@ -753,14 +770,14 @@ export default function DashboardView(props: DashboardViewProps) {
   }> => {
     const ws = shareWorkspace();
     if (!ws) {
-      throw new Error(translate("session.share_select_worker_first"));
+      throw new Error("Select a worker first.");
     }
 
     if (ws.workspaceType !== "remote") {
       const baseUrl = props.openworkServerHostInfo?.baseUrl?.trim() ?? "";
       const token = props.openworkServerHostInfo?.clientToken?.trim() ?? "";
       if (!baseUrl || !token) {
-        throw new Error(translate("session.share_local_host_not_ready"));
+        throw new Error("Local OpenWork host is not ready yet.");
       }
       const client = createOpenworkServerClient({ baseUrl, token });
 
@@ -775,20 +792,20 @@ export default function DashboardView(props: DashboardViewProps) {
       }
 
       if (!workspaceId) {
-        throw new Error(translate("session.share_resolve_local_worker_failed"));
+        throw new Error("Could not resolve this worker on the local OpenWork host.");
       }
 
       return { client, workspaceId, workspace: ws };
     }
 
     if (ws.remoteType !== "openwork") {
-      throw new Error(translate("session.share_openwork_only"));
+      throw new Error("Share service links are available for OpenWork workers.");
     }
 
     const hostUrl = ws.openworkHostUrl?.trim() || ws.baseUrl?.trim() || "";
     const token = ws.openworkToken?.trim() || props.openworkServerSettings.token?.trim() || "";
     if (!hostUrl || !token) {
-      throw new Error(translate("session.share_host_url_token_required"));
+      throw new Error("OpenWork host URL and token are required.");
     }
 
     const client = createOpenworkServerClient({ baseUrl: hostUrl, token });
@@ -815,7 +832,7 @@ export default function DashboardView(props: DashboardViewProps) {
     }
 
     if (!workspaceId) {
-      throw new Error(translate("session.share_resolve_remote_worker_failed"));
+      throw new Error("Could not resolve this worker on the OpenWork host.");
     }
 
     return { client, workspaceId, workspace: ws };
@@ -834,7 +851,7 @@ export default function DashboardView(props: DashboardViewProps) {
         schemaVersion: 1,
         type: "workspace-profile",
         name: `${workspaceLabel(workspace)} profile`,
-        description: translate("session.share_workspace_profile_description"),
+        description: "Full OpenWork workspace profile with config, MCP setup, commands, and skills.",
         workspace: exported,
       };
 
@@ -851,9 +868,7 @@ export default function DashboardView(props: DashboardViewProps) {
         // ignore
       }
     } catch (error) {
-      setShareWorkspaceProfileError(
-        error instanceof Error ? error.message : translate("session.share_workspace_profile_publish_failed"),
-      );
+      setShareWorkspaceProfileError(error instanceof Error ? error.message : "Failed to publish workspace profile");
     } finally {
       setShareWorkspaceProfileBusy(false);
     }
@@ -870,14 +885,14 @@ export default function DashboardView(props: DashboardViewProps) {
       const exported = await client.exportWorkspace(workspaceId);
       const skills = Array.isArray(exported.skills) ? exported.skills : [];
       if (!skills.length) {
-        throw new Error(translate("session.share_no_skills_found"));
+        throw new Error("No skills found in this workspace.");
       }
 
       const payload: SkillsSetBundleV1 = {
         schemaVersion: 1,
         type: "skills-set",
         name: `${workspaceLabel(workspace)} skills`,
-        description: translate("session.share_skills_set_description"),
+        description: "Complete skills set from an OpenWork workspace.",
         skills: skills.map((skill) => ({
           name: skill.name,
           description: skill.description,
@@ -903,7 +918,7 @@ export default function DashboardView(props: DashboardViewProps) {
         // ignore
       }
     } catch (error) {
-      setShareSkillsSetError(error instanceof Error ? error.message : translate("session.share_skills_set_publish_failed"));
+      setShareSkillsSetError(error instanceof Error ? error.message : "Failed to publish skills set");
     } finally {
       setShareSkillsSetBusy(false);
     }
@@ -911,10 +926,10 @@ export default function DashboardView(props: DashboardViewProps) {
 
   const exportDisabledReason = createMemo(() => {
     const ws = shareWorkspace();
-    if (!ws) return translate("dashboard.export_desktop_local_only");
-    if (ws.workspaceType === "remote") return translate("dashboard.export_local_only");
-    if (!isTauriRuntime()) return translate("dashboard.export_desktop_only");
-    if (props.exportWorkspaceBusy) return translate("dashboard.export_running");
+    if (!ws) return "Export is available for local workers in the desktop app.";
+    if (ws.workspaceType === "remote") return "Export is only supported for local workers.";
+    if (!isTauriRuntime()) return "Export is available in the desktop app.";
+    if (props.exportWorkspaceBusy) return "Export is already running.";
     return null;
   });
 
@@ -935,15 +950,13 @@ export default function DashboardView(props: DashboardViewProps) {
   const updatePillLabel = createMemo(() => {
     const state = props.updateStatus?.state;
     if (state === "ready") {
-      return props.anyActiveRuns ? translate("settings.update_toolbar_ready") : translate("settings.install_update");
+      return props.anyActiveRuns ? "Update ready" : "Install update";
     }
     if (state === "downloading") {
       const percent = updateDownloadPercent();
-      return percent == null
-        ? translateWithVars("settings.update_toolbar_downloading_bytes", { downloaded: "..." })
-        : translateWithVars("settings.update_toolbar_downloading_percent", { percent });
+      return percent == null ? "Downloading" : `Downloading ${percent}%`;
     }
-    return translate("settings.update_toolbar_available");
+    return "Update available";
   });
 
   const updatePillButtonTone = createMemo(() => {
@@ -997,11 +1010,11 @@ export default function DashboardView(props: DashboardViewProps) {
     const state = props.updateStatus?.state;
     if (state === "ready") {
       return props.anyActiveRuns
-        ? `${translate("settings.update_toolbar_ready")} ${version}. ${translate("settings.stop_runs_to_update")}.`
-        : `${translate("settings.install_update")} ${version}`;
+        ? `Update ready ${version}. Stop active runs to restart.`
+        : `Restart to apply update ${version}`;
     }
-    if (state === "downloading") return `${translate("settings.update_downloading")} ${version}`.trim();
-    return `${translate("settings.update_toolbar_available")} ${version}`;
+    if (state === "downloading") return `Downloading update ${version}`;
+    return `Update available ${version}`;
   });
 
   const handleUpdatePillClick = () => {
@@ -1014,34 +1027,70 @@ export default function DashboardView(props: DashboardViewProps) {
   };
 
   return (
-    <div class={WORKSPACE_ROOT_CLASS}>
-      <main class={`${WORKSPACE_MAIN_CLASS} order-2`}>
-        <header class={WORKSPACE_TOPBAR_CLASS}>
+    <div class="flex h-screen w-full bg-dls-surface text-dls-text font-sans overflow-hidden">
+      <aside class="w-64 hidden md:flex flex-col bg-dls-sidebar border-r border-dls-border p-4">
+        <div class="flex-1 overflow-y-auto">
+          <Show when={showUpdatePill()}>
+            <button
+              type="button"
+              class={`group mb-3 w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.2)] ${updatePillButtonTone()}`}
+              onClick={handleUpdatePillClick}
+              title={updatePillTitle()}
+              aria-label={updatePillTitle()}
+            >
+              <Show
+                when={props.updateStatus?.state === "downloading"}
+                fallback={
+                  <Circle
+                    size={8}
+                    class={`${updatePillDotTone()} shrink-0 ${props.updateStatus?.state === "available" ? "group-hover:animate-pulse" : ""}`}
+                  />
+                }
+              >
+                <Loader2 size={13} class={`animate-spin shrink-0 ${updatePillDotTone()}`} />
+              </Show>
+              <span class="flex-1 text-left">{updatePillLabel()}</span>
+              <Show when={props.updateStatus?.version}>
+                {(version) => (
+                  <span class={`ml-auto font-mono text-[10px] ${updatePillVersionTone()}`}>v{version()}</span>
+                )}
+              </Show>
+            </button>
+          </Show>
+          <WorkspaceSessionList
+            workspaceSessionGroups={props.workspaceSessionGroups}
+            activeWorkspaceId={props.activeWorkspaceId}
+            selectedSessionId={props.selectedSessionId}
+            connectingWorkspaceId={props.connectingWorkspaceId}
+            newTaskDisabled={props.newTaskDisabled}
+            importingWorkspaceConfig={props.importingWorkspaceConfig}
+            soulStatusByWorkspaceId={props.soulStatusByWorkspaceId}
+            onActivateWorkspace={props.activateWorkspace}
+            onOpenSession={openSessionFromList}
+            onCreateTaskInWorkspace={createTaskInWorkspace}
+            onOpenRenameWorkspace={props.openRenameWorkspace}
+            onShareWorkspace={(workspaceId) => setShareWorkspaceId(workspaceId)}
+            onOpenSoul={openSoulForWorkspace}
+            onRevealWorkspace={revealWorkspaceInFinder}
+            onTestWorkspaceConnection={props.testWorkspaceConnection}
+            onEditWorkspaceConnection={props.editWorkspaceConnection}
+            onForgetWorkspace={props.forgetWorkspace}
+            onOpenCreateWorkspace={props.openCreateWorkspace}
+            onOpenCreateRemoteWorkspace={props.openCreateRemoteWorkspace}
+            onImportWorkspaceConfig={props.importWorkspaceConfig}
+          />
+        </div>
+
+      </aside>
+
+      <main class="flex-1 flex flex-col overflow-hidden bg-dls-surface">
+        <div class="flex-1 overflow-y-auto">
+        <header class="h-14 flex items-center justify-between px-6 md:px-10 border-b border-dls-border sticky top-0 bg-dls-surface z-10">
           <div class="flex items-center gap-3">
-            <button
-              type="button"
-              class="hidden md:flex h-9 w-9 items-center justify-center rounded-lg text-dls-secondary transition-colors hover:text-dls-text hover:bg-dls-hover"
-              onClick={() => setLeftDrawerOpen((prev) => !prev)}
-              title={translate("session.open_side_panel")}
-              aria-label={translate("session.open_side_panel")}
-            >
-              <SlidersHorizontal size={16} />
-            </button>
-            <button
-              type="button"
-              class="h-9 inline-flex items-center gap-2 rounded-lg border border-dls-border px-3 text-sm text-dls-secondary transition-colors hover:text-dls-text hover:bg-dls-hover"
-              onClick={backToWorkspace}
-              title={translate("dashboard.back_to_workspace")}
-              aria-label={translate("dashboard.back_to_workspace")}
-            >
-              <ArrowLeft size={16} />
-              <span class="hidden sm:inline">{translate("dashboard.back_to_workspace")}</span>
-            </button>
-            <h1 class="text-lg font-medium">{title()}</h1>
             <Show when={showUpdatePill()}>
               <button
                 type="button"
-                class={`flex items-center gap-1.5 rounded-full border bg-dls-surface px-2.5 py-1 text-xs font-medium shadow-sm transition-colors active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.2)] ${updatePillBorderTone()} ${updatePillButtonTone()}`}
+                class={`md:hidden flex items-center gap-1.5 rounded-full border bg-dls-surface px-2.5 py-1 text-xs font-medium shadow-sm transition-colors active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.2)] ${updatePillBorderTone()} ${updatePillButtonTone()}`}
                 onClick={handleUpdatePillClick}
                 title={updatePillTitle()}
                 aria-label={updatePillTitle()}
@@ -1071,9 +1120,10 @@ export default function DashboardView(props: DashboardViewProps) {
             <Show when={props.activeSoulStatus?.enabled}>
               <div class="inline-flex items-center gap-1 rounded-full border border-rose-7/40 bg-rose-3/40 px-2 py-1 text-[11px] text-rose-11">
                 <HeartPulse size={11} />
-                {translate("soul.status_soul_on")}
+                Soul on
               </div>
             </Show>
+            <h1 class="text-lg font-medium">{title()}</h1>
             <Show when={props.developerMode}>
               <span class="text-xs text-dls-secondary">{props.headerStatus}</span>
             </Show>
@@ -1081,11 +1131,10 @@ export default function DashboardView(props: DashboardViewProps) {
               <span class="text-xs text-dls-secondary">{props.busyHint}</span>
             </Show>
           </div>
+          <div class="flex items-center gap-2" />
         </header>
 
-        <section class={WORKSPACE_CENTER_SURFACE_CLASS}>
-        <div class="flex-1 overflow-y-auto">
-        <div class="w-full space-y-10 p-4 md:p-6">
+        <div class="p-6 md:p-10 max-w-5xl mx-auto space-y-10">
           <Switch>
             <Match when={props.tab === "scheduled"}>
               <ScheduledTasksView
@@ -1186,6 +1235,7 @@ export default function DashboardView(props: DashboardViewProps) {
                 suggestedPlugins={props.suggestedPlugins}
                 refreshPlugins={props.refreshPlugins}
                 addPlugin={props.addPlugin}
+                removePlugin={props.removePlugin}
               />
             </Match>
 
@@ -1332,7 +1382,7 @@ export default function DashboardView(props: DashboardViewProps) {
                     onClick={props.repairOpencodeCache}
                     disabled={props.cacheRepairBusy || !props.developerMode}
                   >
-                    {props.cacheRepairBusy ? translate("dashboard.repairing_cache") : translate("dashboard.repair_cache")}
+                    {props.cacheRepairBusy ? "Repairing cache" : "Repair cache"}
                   </Button>
                   <Button
                     variant="outline"
@@ -1398,8 +1448,19 @@ export default function DashboardView(props: DashboardViewProps) {
           onOpenBots={openConfig}
         />
         </div>
-        </section>
-        <nav class="md:hidden">
+
+        <StatusBar
+          clientConnected={props.clientConnected}
+          openworkServerStatus={props.openworkServerStatus}
+          developerMode={props.developerMode}
+          onOpenSettings={() => openSettings("general")}
+          onOpenMessaging={openConfig}
+          onOpenProviders={() => props.openProviderAuthModal()}
+          onOpenMcp={() => props.setTab("mcp")}
+          providerConnectedIds={props.providerConnectedIds}
+          mcpStatuses={props.mcpStatuses}
+        />
+        <nav class="md:hidden border-t border-dls-border bg-dls-surface">
           <div class={`mx-auto max-w-5xl px-4 py-3 grid gap-2 ${props.developerMode ? "grid-cols-6" : "grid-cols-5"}`}>
             <button
               class={`flex flex-col items-center gap-1 text-xs ${
@@ -1408,7 +1469,7 @@ export default function DashboardView(props: DashboardViewProps) {
               onClick={() => props.setTab("scheduled")}
             >
               <History size={18} />
-              {translate("dashboard.automations")}
+              Automations
             </button>
             <button
               class={`flex flex-col items-center gap-1 text-xs ${
@@ -1417,7 +1478,7 @@ export default function DashboardView(props: DashboardViewProps) {
               onClick={() => props.setTab("soul")}
             >
               <HeartPulse size={18} class={soulNavIconClass()} />
-              {translate("dashboard.soul")}
+              Soul
             </button>
             <button
               class={`flex flex-col items-center gap-1 text-xs ${
@@ -1426,7 +1487,7 @@ export default function DashboardView(props: DashboardViewProps) {
               onClick={() => props.setTab("skills")}
             >
               <Zap size={18} />
-              {translate("dashboard.skills")}
+              Skills
             </button>
             <button
               class={`flex flex-col items-center gap-1 text-xs ${
@@ -1435,7 +1496,7 @@ export default function DashboardView(props: DashboardViewProps) {
               onClick={() => props.setTab("mcp")}
             >
               <Box size={18} />
-              {translate("dashboard.extensions")}
+              Extensions
             </button>
             <button
               class={`flex flex-col items-center gap-1 text-xs ${
@@ -1444,7 +1505,7 @@ export default function DashboardView(props: DashboardViewProps) {
               onClick={() => props.setTab("identities")}
             >
               <MessageCircle size={18} />
-              {translate("dashboard.messaging")}
+              IDs
             </button>
             <Show when={props.developerMode}>
               <button
@@ -1454,64 +1515,24 @@ export default function DashboardView(props: DashboardViewProps) {
                 onClick={() => props.setTab("config")}
               >
                 <SlidersHorizontal size={18} />
-                {translate("identities.tab_advanced")}
+                Advanced
               </button>
             </Show>
           </div>
         </nav>
       </main>
 
-      <div class={`hidden md:block order-1 ${drawerRailClass(leftDrawerOpen(), "left", WORKSPACE_LEFT_DRAWER_WIDTH_CLASS)}`}>
-      <aside class={`${WORKSPACE_DRAWER_SURFACE_CLASS} flex h-full flex-col p-4`}>
-        <div class="h-full flex flex-col">
-          <div class="flex items-center justify-between gap-2 pb-2 border-b border-dls-border">
-            <button
-              type="button"
-              class="inline-flex min-w-0 max-w-[150px] items-center gap-2 rounded-lg border border-dls-border/70 bg-dls-surface/70 px-2 py-1 text-dls-secondary transition-colors hover:text-dls-text hover:bg-dls-hover"
-              onClick={backToWorkspace}
-              title={translate("dashboard.back_to_workspace")}
-              aria-label={translate("dashboard.back_to_workspace")}
-            >
-              <OpenWorkLogo size={16} />
-              <span class="truncate text-xs font-medium text-dls-text">{workspaceLabel(props.activeWorkspaceDisplay)}</span>
-            </button>
-            <button
-              type="button"
-              class="h-8 w-8 rounded-md text-dls-secondary hover:text-dls-text hover:bg-dls-hover transition-colors"
-              onClick={() => setLeftDrawerOpen(false)}
-              aria-label={translate("common.close")}
-            >
-              <X size={16} />
-            </button>
-          </div>
-          <div class="flex-1 overflow-y-auto space-y-1 pt-3">
-            {navItem("scheduled", translate("dashboard.automations"), <History size={18} />)}
-            {navItem("soul", translate("dashboard.soul"), <HeartPulse size={18} class={soulNavIconClass()} />)}
-            {navItem("skills", translate("dashboard.skills"), <Zap size={18} />)}
-            {navItem("mcp", translate("dashboard.extensions"), <Box size={18} />)}
-            {navItem("identities", translate("dashboard.messaging"), <MessageCircle size={18} />)}
-            <Show when={props.developerMode}>{navItem("config", translate("identities.tab_advanced"), <SlidersHorizontal size={18} />)}</Show>
-          </div>
-          <div class="mt-2 border-t border-dls-border pt-2">
-            <StatusBar
-              clientConnected={props.clientConnected}
-              openworkServerStatus={props.openworkServerStatus}
-              developerMode={props.developerMode}
-              onOpenSettings={() => openSettings("general")}
-              onOpenMessaging={openConfig}
-              onOpenProviders={() => props.openProviderAuthModal()}
-              onOpenMcp={() => props.setTab("mcp")}
-              providerConnectedIds={props.providerConnectedIds}
-              mcpStatuses={props.mcpStatuses}
-              presentation="plain"
-              showTips={false}
-              showSettingsButton={true}
-              compact={true}
-            />
-          </div>
+      <aside class="w-56 hidden md:flex flex-col bg-dls-sidebar border-l border-dls-border p-4">
+        <div class="space-y-1 pt-2">
+          {navItem("scheduled", "Automations", <History size={18} />)}
+          {navItem("soul", "Soul", <HeartPulse size={18} class={soulNavIconClass()} />)}
+          {navItem("skills", "Skills", <Zap size={18} />)}
+          {navItem("mcp", "Extensions", <Box size={18} />)}
+          {navItem("identities", "Messaging", <MessageCircle size={18} />)}
+          <Show when={props.developerMode}>{navItem("config", "Advanced", <SlidersHorizontal size={18} />)}</Show>
         </div>
       </aside>
-      </div>
+
     </div>
   );
 }
